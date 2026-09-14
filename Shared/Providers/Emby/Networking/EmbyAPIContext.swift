@@ -256,6 +256,95 @@ final class EmbyAPIContext {
         return try Self.makeURL(apiBaseURL: baseURL, path: path, query: query)
     }
 
+    func playbackHeaders(customHeaders: [String: String]? = nil) throws -> [String: String] {
+        guard let token = accessToken else {
+            throw EmbyAPIError.authenticationRequired
+        }
+        var headers = authorizationHeaders(token: token, userID: connection?.userID)
+        let sensitiveKeys: Set<String> = [
+            "host",
+            "authorization",
+            "x-emby-token",
+            "cookie",
+            "proxy-authorization",
+        ]
+        if let customHeaders {
+            for (key, value) in customHeaders {
+                if !sensitiveKeys.contains(key.lowercased()) {
+                    headers[key] = value
+                }
+            }
+        }
+        return headers
+    }
+
+    func resolveMediaURL(_ rawValue: String) throws -> URL {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw EmbyPlaybackError.invalidStreamURL
+        }
+
+        guard let baseURL = connection?.baseURL else {
+            throw EmbyAPIError.authenticationRequired
+        }
+
+        if let components = URLComponents(string: trimmed), components.scheme != nil, components.host != nil {
+            guard Self.hasSameOrigin(baseURL, components.url) else {
+                throw EmbyPlaybackError.invalidStreamURL
+            }
+            guard let url = components.url else {
+                throw EmbyPlaybackError.invalidStreamURL
+            }
+            return url
+        }
+
+        guard var pathComponents = URLComponents(string: trimmed) else {
+            throw EmbyPlaybackError.invalidStreamURL
+        }
+
+        var relativePath = pathComponents.path
+        let basePath = baseURL.path
+
+        if relativePath.hasPrefix(basePath) {
+            relativePath = String(relativePath.dropFirst(basePath.count))
+        } else if relativePath.hasPrefix("/emby") {
+            relativePath = String(relativePath.dropFirst(5))
+        }
+
+        while relativePath.hasPrefix("/") {
+            relativePath.removeFirst()
+        }
+
+        var resolved = baseURL
+        if !relativePath.isEmpty {
+            for segment in relativePath.split(separator: "/") {
+                resolved.append(component: String(segment))
+            }
+        }
+
+        guard var finalComponents = URLComponents(url: resolved, resolvingAgainstBaseURL: false) else {
+            throw EmbyPlaybackError.invalidStreamURL
+        }
+        if let queryItems = pathComponents.queryItems, !queryItems.isEmpty {
+            finalComponents.queryItems = queryItems
+        }
+        guard let finalURL = finalComponents.url else {
+            throw EmbyPlaybackError.invalidStreamURL
+        }
+        return finalURL
+    }
+
+    func stopActiveEncoding(playSessionID: String) async throws {
+        try await send(
+            path: ["Videos", "ActiveEncodings"],
+            method: "DELETE",
+            query: [
+                URLQueryItem(name: "DeviceId", value: deviceID),
+                URLQueryItem(name: "PlaySessionId", value: playSessionID),
+            ]
+        )
+    }
+
     private func request<Response: Decodable & Sendable>(
         path: [String],
         method: String,
@@ -451,6 +540,28 @@ final class EmbyAPIContext {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
     }
+    nonisolated static func hasSameOrigin(_ lhs: URL?, _ rhs: URL?) -> Bool {
+        guard let lhs, let rhs,
+              let left = URLComponents(url: lhs, resolvingAgainstBaseURL: false),
+              let right = URLComponents(url: rhs, resolvingAgainstBaseURL: false)
+        else {
+            return false
+        }
+        return left.scheme?.lowercased() == right.scheme?.lowercased()
+            && left.host?.lowercased() == right.host?.lowercased()
+            && effectivePort(left) == effectivePort(right)
+    }
+
+    private nonisolated static func effectivePort(_ components: URLComponents) -> Int? {
+        if let port = components.port {
+            return port
+        }
+        switch components.scheme?.lowercased() {
+        case "http": return 80
+        case "https": return 443
+        default: return nil
+        }
+    }
 }
 
 private final nonisolated class EmbyRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
@@ -461,7 +572,7 @@ private final nonisolated class EmbyRedirectDelegate: NSObject, URLSessionTaskDe
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void,
     ) {
-        guard !Self.hasSameOrigin(task.currentRequest?.url, request.url) else {
+        guard !EmbyAPIContext.hasSameOrigin(task.currentRequest?.url, request.url) else {
             completionHandler(request)
             return
         }
@@ -482,28 +593,5 @@ private final nonisolated class EmbyRedirectDelegate: NSObject, URLSessionTaskDe
         sanitizedRequest.setValue(nil, forHTTPHeaderField: "X-Emby-Authorization")
         sanitizedRequest.setValue(nil, forHTTPHeaderField: "X-Emby-Token")
         completionHandler(sanitizedRequest)
-    }
-
-    private static func hasSameOrigin(_ lhs: URL?, _ rhs: URL?) -> Bool {
-        guard let lhs, let rhs,
-              let left = URLComponents(url: lhs, resolvingAgainstBaseURL: false),
-              let right = URLComponents(url: rhs, resolvingAgainstBaseURL: false)
-        else {
-            return false
-        }
-        return left.scheme?.lowercased() == right.scheme?.lowercased()
-            && left.host?.lowercased() == right.host?.lowercased()
-            && effectivePort(left) == effectivePort(right)
-    }
-
-    private static func effectivePort(_ components: URLComponents) -> Int? {
-        if let port = components.port {
-            return port
-        }
-        switch components.scheme?.lowercased() {
-        case "http": return 80
-        case "https": return 443
-        default: return nil
-        }
     }
 }

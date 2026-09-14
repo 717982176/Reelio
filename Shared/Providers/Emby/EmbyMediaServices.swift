@@ -17,7 +17,7 @@ enum EmbyServiceError: LocalizedError, Equatable {
 
 @MainActor
 final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, MediaSearchService,
-    MediaArtworkService, MediaDetailService, MediaPlaybackService, MediaLiveTVService,
+    MediaArtworkService, MediaDetailService, MediaLiveTVService,
     MediaDownloadService, MediaAuthorizationService
 {
     private let context: EmbyAPIContext
@@ -485,50 +485,6 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
         return items.compactMap { MediaDisplayItem(embyItem: $0, server: server) }
     }
 
-    // MARK: - MediaPlaybackService (Deferred - Phase 6)
-
-    var serverAccessGeneration: Int { 0 }
-
-    func queue(startingWith _: String, kind _: MediaKind, shuffle _: Bool) async throws -> PlaybackQueue {
-        throw EmbyServiceError.unsupportedOperation
-    }
-
-    func queue(startingWith _: MediaItem, shuffle _: Bool) async throws -> PlaybackQueue {
-        throw EmbyServiceError.unsupportedOperation
-    }
-
-    func prepare(media _: MediaItem, resume _: Bool, quality _: TranscodeQualityPreset) async throws -> PlaybackPlan {
-        throw EmbyServiceError.unsupportedOperation
-    }
-
-    func release(plan _: PlaybackPlan) async {}
-
-    func reportStarted(plan _: PlaybackPlan, position _: TimeInterval, isPaused _: Bool) async throws {
-        throw EmbyServiceError.unsupportedOperation
-    }
-
-    func reportProgress(plan _: PlaybackPlan, position _: TimeInterval, isPaused _: Bool) async throws {
-        throw EmbyServiceError.unsupportedOperation
-    }
-
-    func reportStopped(plan _: PlaybackPlan, position _: TimeInterval) async throws {
-        throw EmbyServiceError.unsupportedOperation
-    }
-
-    func externalSubtitles(media _: MediaItem) async throws -> [ExternalSubtitleTrack] {
-        throw EmbyServiceError.unsupportedOperation
-    }
-
-    func serverAccessRecoveryError(from _: Error) -> MediaServerAccessRecoveryError? {
-        nil
-    }
-
-    func recoverServerAccessIfUnauthorized() async throws -> Bool {
-        false
-    }
-
-    func forceServerAccessRecovery() async throws {}
-
     // MARK: - MediaLiveTVService (Deferred)
 
     var dvr: (any MediaDVRService)? { nil }
@@ -589,6 +545,7 @@ enum EmbyMediaServicesFactory {
         guard let connection = context.connection else { return nil }
         let adapter = EmbyMediaServiceAdapter(context: context, server: connection.serverIdentity)
         let favorites = EmbyFavoritesService(context: context, server: connection.serverIdentity)
+        let playback = EmbyPlaybackService(context: context, server: connection.serverIdentity)
         let services = MediaServices(
             provider: .emby,
             identity: connection.serverIdentity,
@@ -599,7 +556,7 @@ enum EmbyMediaServicesFactory {
             artwork: adapter,
             detail: adapter,
             favorites: favorites,
-            playback: adapter,
+            playback: playback,
             liveTV: adapter,
             downloads: adapter,
             authorization: adapter,
