@@ -2,6 +2,12 @@ name: Build iOS IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      bundle_id:
+        description: Bundle identifier for the unsigned IPA
+        required: true
+        default: com.reelio.app
+        type: string
 
 permissions:
   contents: read
@@ -21,6 +27,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -configuration Debug \
             -derivedDataPath build/DerivedData \
+            PRODUCT_BUNDLE_IDENTIFIER="${{ inputs.bundle_id }}" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -46,6 +53,34 @@ jobs:
           app_path="${apps[0]}"
           app_name="$(basename "$app_path")"
           echo "Found app: $app_path"
+
+          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app_path/Info.plist" 2>/dev/null || true)
+          bundle_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Info.plist" 2>/dev/null || true)
+          bundle_executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app_path/Info.plist" 2>/dev/null || true)
+
+          echo "CFBundleIdentifier: $bundle_id"
+          echo "CFBundleVersion: $bundle_version"
+          echo "CFBundleExecutable: $bundle_executable"
+
+          if [[ -z "$bundle_id" ]]; then
+            echo "Error: CFBundleIdentifier is missing" >&2
+            exit 1
+          fi
+
+          if [[ -z "$bundle_version" ]]; then
+            echo "Error: CFBundleVersion is missing" >&2
+            exit 1
+          fi
+
+          if [[ -z "$bundle_executable" ]]; then
+            echo "Error: CFBundleExecutable is missing" >&2
+            exit 1
+          fi
+
+          if [[ "$bundle_id" != "${{ inputs.bundle_id }}" ]]; then
+            echo "Error: CFBundleIdentifier mismatch" >&2
+            exit 1
+          fi
 
           rm -rf build/ipa
           mkdir -p build/ipa/Payload
