@@ -36,6 +36,7 @@ final class SessionManager {
         case signedOut
         case needsJellyfinAuthentication
         case needsEmbyAuthentication
+        case embyAuthenticated
         case needsProfileSelection
         case needsServerSelection
         case ready
@@ -43,6 +44,8 @@ final class SessionManager {
 
     @ObservationIgnored private let context: PlexAPIContext
     @ObservationIgnored private let jellyfinContext: JellyfinAPIContext
+    @ObservationIgnored private let embyContext: EmbyAPIContext
+    @ObservationIgnored private let embyConnectionStore = EmbyConnectionStore()
     @ObservationIgnored private let libraryStore: LibraryStore
     @ObservationIgnored private let favoritesStore: FavoritesStore
     private(set) var status: Status = .hydrating
@@ -50,6 +53,7 @@ final class SessionManager {
     private(set) var provider: MediaProvider?
     private(set) var mediaServices: MediaServices?
     private(set) var jellyfinHydrationError: String?
+    private(set) var embyHydrationError: String?
     private(set) var authToken: String?
     private(set) var user: PlexCloudUser?
     private(set) var plexServer: PlexCloudResource?
@@ -68,11 +72,13 @@ final class SessionManager {
     init(
         context: PlexAPIContext,
         jellyfinContext: JellyfinAPIContext,
+        embyContext: EmbyAPIContext,
         libraryStore: LibraryStore,
         favoritesStore: FavoritesStore,
     ) {
         self.context = context
         self.jellyfinContext = jellyfinContext
+        self.embyContext = embyContext
         self.libraryStore = libraryStore
         self.favoritesStore = favoritesStore
         context.configureServerAccessRecovery { [weak self] force in
@@ -83,6 +89,9 @@ final class SessionManager {
         }
         jellyfinContext.configureAuthenticationRequiredHandler { [weak self] in
             self?.invalidateJellyfinSession()
+        }
+        embyContext.configureAuthenticationRequiredHandler { [weak self] in
+            self?.invalidateEmbySession()
         }
         Task { await hydrate() }
     }
@@ -104,6 +113,7 @@ final class SessionManager {
         status = .hydrating
         loadingPhase = .preparing
         jellyfinHydrationError = nil
+        embyHydrationError = nil
         do {
             let selectedProvider = try storedProvider()
             guard let selectedProvider else {
@@ -119,7 +129,7 @@ final class SessionManager {
             case .jellyfin:
                 await hydrateJellyfin()
             case .emby:
-                status = .needsEmbyAuthentication
+                await hydrateEmby()
             }
         } catch {
             guard !Task.isCancelled, !error.isCancellation else { return }
@@ -137,6 +147,7 @@ final class SessionManager {
         self.provider = provider
         status = .hydrating
         jellyfinHydrationError = nil
+        embyHydrationError = nil
         switch provider {
         case .plex:
             do {
@@ -150,15 +161,17 @@ final class SessionManager {
             await hydrateJellyfin()
         case .emby:
             await clearSession()
-            status = .needsEmbyAuthentication
+            await hydrateEmby()
         }
     }
 
     func requestProviderSelection() async {
         await clearSession()
         jellyfinContext.reset()
+        embyContext.reset()
         provider = nil
         jellyfinHydrationError = nil
+        embyHydrationError = nil
         UserDefaults.standard.removeObject(forKey: providerDefaultsKey)
         #if os(tvOS)
             topShelfSessionStore.clear()
@@ -172,6 +185,13 @@ final class SessionManager {
         status = .hydrating
         jellyfinHydrationError = nil
         await hydrateJellyfin()
+    }
+
+    func retryEmbyHydration() async {
+        guard provider == .emby else { return }
+        status = .hydrating
+        embyHydrationError = nil
+        await hydrateEmby()
     }
 
     func signIn(with token: String) async throws {
@@ -208,15 +228,12 @@ final class SessionManager {
                 TVTopShelfContentProvider.topShelfContentDidChange()
             #endif
         case .some(.emby):
-            await clearSession()
-            #if os(tvOS)
-                topShelfSessionStore.clear()
-                TVTopShelfContentProvider.topShelfContentDidChange()
-            #endif
+            await signOutEmby()
         }
 
         provider = nil
         jellyfinHydrationError = nil
+        embyHydrationError = nil
         UserDefaults.standard.removeObject(forKey: providerDefaultsKey)
         status = .needsProviderSelection
     }
@@ -249,6 +266,46 @@ final class SessionManager {
             status = .ready
         } catch {
             jellyfinContext.reset()
+            ErrorReporter.capture(error)
+            throw error
+        }
+    }
+
+    func completeEmbySignIn(
+        authenticatedSession: EmbyAuthenticatedSession,
+        connection: EmbyConnection,
+    ) throws {
+        guard authenticatedSession.serverID == connection.serverID,
+              authenticatedSession.user.id == connection.userID,
+              !authenticatedSession.accessToken.isEmpty
+        else {
+            throw EmbyAPIError.invalidResponse
+        }
+
+        let identity = connection.identity
+        let tokenKey = EmbyConnectionStore.accessTokenKey(for: identity)
+        let previousToken = try keychain.string(forKey: tokenKey)
+
+        do {
+            try keychain.setString(authenticatedSession.accessToken, forKey: tokenKey)
+            try embyConnectionStore.upsert(connection, makeActive: true)
+            UserDefaults.standard.set(MediaProvider.emby.rawValue, forKey: providerDefaultsKey)
+            provider = .emby
+            embyContext.configure(
+                connection: connection,
+                token: authenticatedSession.accessToken,
+                currentUser: authenticatedSession.user,
+            )
+            embyHydrationError = nil
+            loadingPhase = .libraries
+            status = .embyAuthenticated
+        } catch {
+            if let previousToken {
+                try? keychain.setString(previousToken, forKey: tokenKey)
+            } else {
+                try? keychain.deleteValue(forKey: tokenKey)
+            }
+            embyContext.reset()
             ErrorReporter.capture(error)
             throw error
         }
@@ -599,6 +656,48 @@ final class SessionManager {
         }
     }
 
+    private func hydrateEmby() async {
+        embyContext.reset()
+        var connection: EmbyConnection?
+
+        do {
+            guard let storedConnection = try embyConnectionStore.activeConnection() else {
+                status = .needsEmbyAuthentication
+                return
+            }
+            connection = storedConnection
+            let tokenKey = EmbyConnectionStore.accessTokenKey(for: storedConnection.identity)
+            guard let token = try keychain.string(forKey: tokenKey), !token.isEmpty else {
+                status = .needsEmbyAuthentication
+                return
+            }
+
+            loadingPhase = .account
+            embyContext.configure(connection: storedConnection, token: token)
+            _ = try await embyContext.validateAuthenticatedSession()
+            guard !Task.isCancelled else { return }
+            embyHydrationError = nil
+            loadingPhase = .libraries
+            status = .embyAuthenticated
+        } catch let error as EmbyAPIError where error == .authenticationRequired {
+            if let connection {
+                try? keychain.deleteValue(
+                    forKey: EmbyConnectionStore.accessTokenKey(for: connection.identity),
+                )
+            }
+            embyContext.reset()
+            embyHydrationError = nil
+            status = .needsEmbyAuthentication
+        } catch {
+            guard !Task.isCancelled, !error.isCancellation else { return }
+            ErrorReporter.capture(error)
+            embyContext.reset()
+            embyHydrationError = (error as? EmbyAPIError)?.localizedDescription
+                ?? String(localized: "emby.errors.invalidResponse")
+            status = .needsEmbyAuthentication
+        }
+    }
+
     private func signOutJellyfin() async {
         let connection = jellyfinContext.connection
         do {
@@ -627,6 +726,45 @@ final class SessionManager {
         #endif
     }
 
+    private func signOutEmby() async {
+        let connection = embyContext.connection ?? (try? embyConnectionStore.activeConnection())
+
+        if embyContext.isAuthenticated {
+            do {
+                try await embyContext.send(path: ["Sessions", "Logout"], method: "POST")
+            } catch {
+                if !Task.isCancelled, !error.isCancellation,
+                   (error as? EmbyAPIError) != .serverUnreachable,
+                   (error as? EmbyAPIError) != .authenticationRequired
+                {
+                    ErrorReporter.capture(error)
+                }
+            }
+        }
+
+        if let connection {
+            do {
+                try keychain.deleteValue(
+                    forKey: EmbyConnectionStore.accessTokenKey(for: connection.identity),
+                )
+            } catch {
+                ErrorReporter.capture(error)
+            }
+            do {
+                try embyConnectionStore.remove(connection.identity)
+            } catch {
+                ErrorReporter.capture(error)
+            }
+        }
+
+        embyContext.reset()
+        await clearSession()
+        #if os(tvOS)
+            topShelfSessionStore.clear()
+            TVTopShelfContentProvider.topShelfContentDidChange()
+        #endif
+    }
+
     private func invalidateJellyfinSession() {
         guard provider == .jellyfin, let connection = jellyfinContext.connection else { return }
         do {
@@ -643,6 +781,22 @@ final class SessionManager {
         #endif
         jellyfinHydrationError = nil
         status = .needsJellyfinAuthentication
+    }
+
+    private func invalidateEmbySession() {
+        guard provider == .emby, let connection = embyContext.connection else { return }
+        do {
+            try keychain.deleteValue(
+                forKey: EmbyConnectionStore.accessTokenKey(for: connection.identity),
+            )
+        } catch {
+            ErrorReporter.capture(error)
+        }
+        embyContext.reset()
+        mediaServices = nil
+        libraryStore.configure(service: nil)
+        embyHydrationError = nil
+        status = .needsEmbyAuthentication
     }
 
     private func jellyfinTokenKey(connection: JellyfinConnection) -> String {

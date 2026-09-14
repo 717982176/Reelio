@@ -6,6 +6,7 @@ struct StrimrApp: App {
 
     @State private var plexApiContext: PlexAPIContext
     @State private var jellyfinAPIContext: JellyfinAPIContext
+    @State private var embyAPIContext: EmbyAPIContext
     @State private var sessionManager: SessionManager
     @State private var settingsManager: SettingsManager
     @State private var downloadManager: DownloadManager
@@ -16,11 +17,13 @@ struct StrimrApp: App {
     init() {
         let context = PlexAPIContext()
         let jellyfinContext = JellyfinAPIContext()
+        let embyContext = EmbyAPIContext()
         let store = LibraryStore(context: context)
         let favoritesStore = FavoritesStore()
         let sessionManager = SessionManager(
             context: context,
             jellyfinContext: jellyfinContext,
+            embyContext: embyContext,
             libraryStore: store,
             favoritesStore: favoritesStore,
         )
@@ -28,6 +31,7 @@ struct StrimrApp: App {
         let downloadManager = DownloadManager(settingsManager: settingsManager)
         _plexApiContext = State(initialValue: context)
         _jellyfinAPIContext = State(initialValue: jellyfinContext)
+        _embyAPIContext = State(initialValue: embyContext)
         _sessionManager = State(initialValue: sessionManager)
         _settingsManager = State(initialValue: settingsManager)
         _downloadManager = State(initialValue: downloadManager)
@@ -43,6 +47,7 @@ struct StrimrApp: App {
             ContentView()
                 .environment(plexApiContext)
                 .environment(jellyfinAPIContext)
+                .environment(embyAPIContext)
                 .environment(sessionManager)
                 .environment(settingsManager)
                 .environment(downloadManager)

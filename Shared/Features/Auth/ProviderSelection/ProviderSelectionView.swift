@@ -67,11 +67,17 @@ struct ProviderSelectionView: View {
             accent: Color(red: 0.46, green: 0.49, blue: 0.96),
             provider: .jellyfin,
         )
+        providerButton(
+            title: "provider.emby",
+            image: nil,
+            accent: Color(red: 0.33, green: 0.76, blue: 0.38),
+            provider: .emby,
+        )
     }
 
     private func providerButton(
         title: LocalizedStringKey,
-        image: String,
+        image: String?,
         accent: Color,
         provider: MediaProvider,
     ) -> some View {
@@ -84,12 +90,23 @@ struct ProviderSelectionView: View {
             Task { await sessionManager.selectProvider(provider) }
         } label: {
             VStack(alignment: .leading, spacing: 0) {
-                Image(image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: logoMaxWidth, maxHeight: logoMaxHeight)
+                if let image {
+                    Image(image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: logoMaxWidth, maxHeight: logoMaxHeight)
+                        .frame(maxWidth: .infinity, minHeight: logoAreaHeight)
+                        .accessibilityHidden(true)
+                } else {
+                    Label {
+                        Text(title)
+                            .font(.largeTitle.bold())
+                    } icon: {
+                        Image(systemName: "play.rectangle.fill")
+                    }
+                    .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, minHeight: logoAreaHeight)
-                    .accessibilityHidden(true)
+                }
             }
             .padding(cardPadding)
             .frame(maxWidth: .infinity, minHeight: cardMinimumHeight, alignment: .leading)
