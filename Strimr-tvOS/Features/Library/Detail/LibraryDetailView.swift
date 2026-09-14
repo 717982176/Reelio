@@ -29,7 +29,7 @@ struct LibraryDetailView: View {
             Color("Background")
                 .ignoresSafeArea()
 
-            if selectedTab == .recommended, let heroMedia = viewModel.heroMedia {
+            if activeTab == .recommended, let heroMedia = viewModel.heroMedia {
                 MediaHeroBackgroundView(media: heroMedia)
             }
 
@@ -52,23 +52,26 @@ struct LibraryDetailView: View {
             .animation(.easeInOut(duration: 0.2), value: isSidebarFocused)
         }
         .onAppear {
+            if mediaServices.provider == .emby, selectedTab == .recommended {
+                selectedTab = .browse
+            }
             contentFocused = true
         }
         .onChange(of: settingsManager.interface.displayCollections) { _, displayCollections in
             if !displayCollections, selectedTab == .collections {
-                selectedTab = .recommended
+                selectedTab = mediaServices.provider == .emby ? .browse : .recommended
             }
         }
         .onChange(of: settingsManager.interface.displayPlaylists) { _, displayPlaylists in
             if !displayPlaylists, selectedTab == .playlists {
-                selectedTab = .recommended
+                selectedTab = mediaServices.provider == .emby ? .browse : .recommended
             }
         }
     }
 
     private var contentView: some View {
         Group {
-            switch selectedTab {
+            switch activeTab {
             case .recommended:
                 LibraryRecommendedView(
                     viewModel: LibraryRecommendedViewModel(
@@ -163,7 +166,7 @@ struct LibraryDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .foregroundStyle(selectedTab == tab ? .brandPrimary : .secondary)
+            .foregroundStyle(activeTab == tab ? .brandPrimary : .secondary)
         }
         .focused($focusedSidebarItem, equals: tab)
         .buttonStyle(.plain)
@@ -185,6 +188,10 @@ struct LibraryDetailView: View {
         240 + 48 + 12 + 48
     }
 
+    private var activeTab: LibraryDetailTab {
+        availableTabs.contains(selectedTab) ? selectedTab : .browse
+    }
+
     private var availableTabs: [LibraryDetailTab] {
         if mediaServices.provider == .jellyfin {
             return library.type == .collection || library.type == .playlist
@@ -193,11 +200,13 @@ struct LibraryDetailView: View {
         }
         return LibraryDetailTab.allCases.filter { tab in
             switch tab {
+            case .recommended:
+                mediaServices.provider != .emby
             case .collections:
                 settingsManager.interface.displayCollections
             case .playlists:
                 settingsManager.interface.displayPlaylists
-            default:
+            case .browse:
                 true
             }
         }

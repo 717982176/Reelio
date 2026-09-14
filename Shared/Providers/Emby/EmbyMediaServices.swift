@@ -8,7 +8,7 @@ enum EmbyServiceError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .unsupportedOperation:
-            String(localized: "common.errors.unknown")
+            String(localized: "emby.errors.unsupportedOperation")
         case .unavailable:
             String(localized: "emby.errors.serverUnreachable")
         }
@@ -53,66 +53,133 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
     // MARK: - MediaHomeService
 
     func loadHome(hiddenLibraryIDs: Set<String>, includesPlaylists _: Bool) async throws -> HomeContent {
-        let visibleLibraries = try await catalog.libraries().compactMap(Library.init).filter {
-            !hiddenLibraryIDs.contains($0.id) && ($0.type == .movie || $0.type == .series)
+        let visibleLibraries: [Library]
+        do {
+            visibleLibraries = try await catalog.libraries().compactMap(Library.init).filter {
+                !hiddenLibraryIDs.contains($0.id) && ($0.type == .movie || $0.type == .series)
+            }
+        } catch {
+            captureHomeSectionFailure(error, section: "libraries")
+            throw error
         }
 
-        async let resumeItems = catalog.resume(limit: 20)
-        async let nextUpItems = catalog.nextUp(limit: 20)
-
+        var firstSectionError: Error?
+        var successfulSectionCount = 0
+        var continueWatchingHub: Hub?
         var recentlyAddedHubs: [Hub] = []
-        for library in visibleLibraries {
-            let typeParam = library.type == .series ? "Episode,Series" : "Movie"
-            let items = try await catalog.latest(types: typeParam, parentID: library.id, limit: 16)
+
+        do {
+            let items = try await catalog.resume(limit: 20)
+            successfulSectionCount += 1
+            let displayItems = items.compactMap { MediaDisplayItem(embyItem: $0, server: server) }
+            if !displayItems.isEmpty {
+                continueWatchingHub = Hub(
+                    id: "emby.resume",
+                    key: "emby.resume",
+                    hubKey: "emby.resume",
+                    title: String(localized: "emby.home.resume"),
+                    size: displayItems.count,
+                    more: false,
+                    items: displayItems,
+                )
+            }
+        } catch {
+            try handleHomeSectionFailure(error, section: "resume", firstError: &firstSectionError)
+        }
+
+        do {
+            let items = try await catalog.nextUp(limit: 20)
+            successfulSectionCount += 1
             let displayItems = items.compactMap { MediaDisplayItem(embyItem: $0, server: server) }
             if !displayItems.isEmpty {
                 recentlyAddedHubs.append(
                     Hub(
-                        id: "emby.latest.\(library.id)",
-                        key: "emby.latest.\(library.id)",
-                        hubKey: "emby.latest.\(library.id)",
-                        title: String(localized: "emby.home.latestIn \(library.title)"),
+                        id: "emby.nextUp",
+                        key: "emby.nextUp",
+                        hubKey: "emby.nextUp",
+                        title: String(localized: "emby.home.nextUp"),
                         size: displayItems.count,
                         more: false,
                         items: displayItems,
                     )
                 )
             }
+        } catch {
+            try handleHomeSectionFailure(error, section: "nextUp", firstError: &firstSectionError)
         }
 
-        let continueWatchingDisplay = try await resumeItems.compactMap {
-            MediaDisplayItem(embyItem: $0, server: server)
+        for library in visibleLibraries {
+            do {
+                let typeParam = library.type == .series ? "Episode,Series" : "Movie"
+                let items = try await catalog.latest(types: typeParam, parentID: library.id, limit: 16)
+                successfulSectionCount += 1
+                let displayItems = items.compactMap { MediaDisplayItem(embyItem: $0, server: server) }
+                if !displayItems.isEmpty {
+                    recentlyAddedHubs.append(
+                        Hub(
+                            id: "emby.latest.\(library.id)",
+                            key: "emby.latest.\(library.id)",
+                            hubKey: "emby.latest.\(library.id)",
+                            title: String(localized: "emby.home.latestIn \(library.title)"),
+                            size: displayItems.count,
+                            more: false,
+                            items: displayItems,
+                        )
+                    )
+                }
+            } catch {
+                try handleHomeSectionFailure(
+                    error,
+                    section: "latest[\(library.id)]",
+                    firstError: &firstSectionError,
+                )
+            }
         }
-        let continueWatchingHub = continueWatchingDisplay.isEmpty ? nil : Hub(
-            id: "emby.resume",
-            key: "emby.resume",
-            hubKey: "emby.resume",
-            title: String(localized: "emby.home.resume"),
-            size: continueWatchingDisplay.count,
-            more: false,
-            items: continueWatchingDisplay,
-        )
 
-        let nextUpDisplay = try await nextUpItems.compactMap {
-            MediaDisplayItem(embyItem: $0, server: server)
-        }
-        if !nextUpDisplay.isEmpty {
-            let nextUpHub = Hub(
-                id: "emby.nextUp",
-                key: "emby.nextUp",
-                hubKey: "emby.nextUp",
-                title: String(localized: "emby.home.nextUp"),
-                size: nextUpDisplay.count,
-                more: false,
-                items: nextUpDisplay,
-            )
-            recentlyAddedHubs.insert(nextUpHub, at: 0)
+        guard successfulSectionCount > 0 else {
+            throw firstSectionError ?? EmbyServiceError.unavailable
         }
 
         return HomeContent(
             continueWatching: continueWatchingHub,
             recentlyAdded: recentlyAddedHubs,
         )
+    }
+
+    private func handleHomeSectionFailure(
+        _ error: Error,
+        section: String,
+        firstError: inout Error?,
+    ) throws {
+        guard !error.isCancellation else { throw error }
+        captureHomeSectionFailure(error, section: section)
+
+        if let apiError = error as? EmbyAPIError {
+            switch apiError {
+            case .authenticationRequired, .permissionDenied, .invalidCredentials,
+                 .invalidServerURL, .unsupportedServer:
+                throw error
+            default:
+                break
+            }
+        }
+
+        if firstError == nil {
+            firstError = error
+        }
+    }
+
+    private func captureHomeSectionFailure(_ error: Error, section: String) {
+        let underlyingError = error as NSError
+        let contextualError = NSError(
+            domain: "Reelio.Emby.HomeSection",
+            code: underlyingError.code,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Emby Home section failed: \(section)",
+                NSUnderlyingErrorKey: underlyingError,
+            ],
+        )
+        ErrorReporter.capture(contextualError)
     }
 
     func items(in hub: Hub, startIndex: Int, limit: Int) async throws -> MediaPage<MediaDisplayItem> {

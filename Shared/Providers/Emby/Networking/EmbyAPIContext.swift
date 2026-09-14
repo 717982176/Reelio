@@ -9,7 +9,8 @@ enum EmbyAPIError: LocalizedError, Equatable {
     case authenticationRequired
     case permissionDenied
     case invalidResponse
-    case httpStatus(Int)
+    case httpStatus(statusCode: Int, endpoint: String)
+    case decodingFailure(endpoint: String, summary: String)
 
     var errorDescription: String? {
         switch self {
@@ -25,8 +26,37 @@ enum EmbyAPIError: LocalizedError, Equatable {
             String(localized: "emby.errors.authenticationRequired")
         case .permissionDenied:
             String(localized: "emby.errors.permissionDenied")
-        case .invalidResponse, .httpStatus:
+        case .invalidResponse:
             String(localized: "emby.errors.invalidResponse")
+        case let .httpStatus(statusCode, endpoint):
+            Self.descriptionWithDebugDetails(
+                String(localized: "emby.errors.invalidResponse"),
+                details: "\(endpoint) → HTTP \(statusCode)",
+            )
+        case let .decodingFailure(endpoint, summary):
+            Self.descriptionWithDebugDetails(
+                String(localized: "emby.errors.invalidResponse"),
+                details: "\(endpoint) → \(summary)",
+            )
+        }
+    }
+
+    private static func descriptionWithDebugDetails(_ description: String, details: String) -> String {
+        #if DEBUG
+            "\(description) [\(details)]"
+        #else
+            description
+        #endif
+    }
+
+    var failureReason: String? {
+        switch self {
+        case let .httpStatus(statusCode, endpoint):
+            "HTTP status \(statusCode) from \(endpoint)"
+        case let .decodingFailure(endpoint, summary):
+            "JSON decoding failed for \(endpoint): \(summary)"
+        default:
+            nil
         }
     }
 }
@@ -142,7 +172,11 @@ final class EmbyAPIContext {
         guard response.statusCode != 400, response.statusCode != 401 else {
             throw EmbyAPIError.invalidCredentials
         }
-        try validateStatus(response.statusCode)
+        try validateStatus(
+            response.statusCode,
+            method: "POST",
+            path: ["Users", "AuthenticateByName"],
+        )
 
         let authenticated: EmbyAuthenticatedSession
         do {
@@ -230,7 +264,7 @@ final class EmbyAPIContext {
             query: query,
             body: body,
         )
-        try validateStatus(response.statusCode)
+        try validateStatus(response.statusCode, method: method, path: path)
     }
 
     func rawData(
@@ -245,7 +279,7 @@ final class EmbyAPIContext {
             query: query,
             body: body,
         )
-        try validateStatus(response.statusCode)
+        try validateStatus(response.statusCode, method: method, path: path)
         return data
     }
 
@@ -357,9 +391,14 @@ final class EmbyAPIContext {
             query: query,
             body: body,
         )
-        try validateStatus(response.statusCode)
+        try validateStatus(response.statusCode, method: method, path: path)
         do {
             return try JSONDecoder().decode(Response.self, from: data)
+        } catch let error as DecodingError {
+            throw EmbyAPIError.decodingFailure(
+                endpoint: Self.logicalEndpoint(method: method, path: path),
+                summary: Self.decodingSummary(error),
+            )
         } catch {
             throw EmbyAPIError.invalidResponse
         }
@@ -453,7 +492,11 @@ final class EmbyAPIContext {
         return headers
     }
 
-    private func validateStatus(_ statusCode: Int) throws {
+    private func validateStatus(
+        _ statusCode: Int,
+        method: String,
+        path: [String],
+    ) throws {
         switch statusCode {
         case 200 ..< 300:
             return
@@ -463,8 +506,35 @@ final class EmbyAPIContext {
         case 403:
             throw EmbyAPIError.permissionDenied
         default:
-            throw EmbyAPIError.httpStatus(statusCode)
+            throw EmbyAPIError.httpStatus(
+                statusCode: statusCode,
+                endpoint: Self.logicalEndpoint(method: method, path: path),
+            )
         }
+    }
+
+    private static func logicalEndpoint(method: String, path: [String]) -> String {
+        "\(method.uppercased()) /\(path.joined(separator: "/"))"
+    }
+
+    private static func decodingSummary(_ error: DecodingError) -> String {
+        switch error {
+        case let .typeMismatch(type, context):
+            "typeMismatch(\(String(describing: type))) at \(codingPath(context.codingPath))"
+        case let .valueNotFound(type, context):
+            "valueNotFound(\(String(describing: type))) at \(codingPath(context.codingPath))"
+        case let .keyNotFound(key, context):
+            "keyNotFound(\(key.stringValue)) at \(codingPath(context.codingPath))"
+        case let .dataCorrupted(context):
+            "dataCorrupted at \(codingPath(context.codingPath))"
+        @unknown default:
+            "unknown decoding error"
+        }
+    }
+
+    private static func codingPath(_ codingKeys: [any CodingKey]) -> String {
+        let path = codingKeys.map(\.stringValue).joined(separator: ".")
+        return path.isEmpty ? "<root>" : path
     }
 
     private static func normalizedAPIBaseURL(_ value: String) throws -> URL {

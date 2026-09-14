@@ -1925,6 +1925,28 @@
         }
       }
     },
+    "emby.errors.unsupportedOperation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Emby feature is not supported yet."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette fonctionnalité Emby n’est pas encore prise en charge."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 Emby 功能暂不支持。"
+          }
+        }
+      }
+    },
     "emby.errors.unsupportedServer" : {
       "localizations" : {
         "en" : {

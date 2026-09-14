@@ -34,7 +34,7 @@ struct LibraryDetailView: View {
             }
 
             Group {
-                switch selectedTab {
+                switch activeTab {
                 case .recommended:
                     LibraryRecommendedView(
                         viewModel: LibraryRecommendedViewModel(
@@ -75,16 +75,25 @@ struct LibraryDetailView: View {
         }
         .navigationTitle(library.title)
         .toolbarTitleDisplayMode(.inline)
+        .onAppear {
+            if mediaServices.provider == .emby, selectedTab == .recommended {
+                selectedTab = .browse
+            }
+        }
         .onChange(of: settingsManager.interface.displayCollections) { _, displayCollections in
             if !displayCollections, selectedTab == .collections {
-                selectedTab = .recommended
+                selectedTab = mediaServices.provider == .emby ? .browse : .recommended
             }
         }
         .onChange(of: settingsManager.interface.displayPlaylists) { _, displayPlaylists in
             if !displayPlaylists, selectedTab == .playlists {
-                selectedTab = .recommended
+                selectedTab = mediaServices.provider == .emby ? .browse : .recommended
             }
         }
+    }
+
+    private var activeTab: LibraryDetailTab {
+        availableTabs.contains(selectedTab) ? selectedTab : .browse
     }
 
     private var availableTabs: [LibraryDetailTab] {
@@ -95,11 +104,13 @@ struct LibraryDetailView: View {
         }
         return LibraryDetailTab.allCases.filter { tab in
             switch tab {
+            case .recommended:
+                mediaServices.provider != .emby
             case .collections:
                 settingsManager.interface.displayCollections
             case .playlists:
                 settingsManager.interface.displayPlaylists
-            default:
+            case .browse:
                 true
             }
         }
