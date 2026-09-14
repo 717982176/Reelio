@@ -42,10 +42,6 @@ struct ContentView: View {
                     NavigationStack {
                         EmbyAuthenticationView()
                     }
-                case .embyAuthenticated:
-                    ProgressView("startup.loading.libraries")
-                        .progressViewStyle(.circular)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .needsProfileSelection:
                     NavigationStack {
                         ProfileSwitcherView(

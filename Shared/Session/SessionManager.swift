@@ -36,7 +36,6 @@ final class SessionManager {
         case signedOut
         case needsJellyfinAuthentication
         case needsEmbyAuthentication
-        case embyAuthenticated
         case needsProfileSelection
         case needsServerSelection
         case ready
@@ -285,6 +284,8 @@ final class SessionManager {
         let identity = connection.identity
         let tokenKey = EmbyConnectionStore.accessTokenKey(for: identity)
         let previousToken = try keychain.string(forKey: tokenKey)
+        let previousConnectionStoreState = try? embyConnectionStore.load()
+        let previousProvider = UserDefaults.standard.string(forKey: providerDefaultsKey)
 
         do {
             try keychain.setString(authenticatedSession.accessToken, forKey: tokenKey)
@@ -296,16 +297,28 @@ final class SessionManager {
                 token: authenticatedSession.accessToken,
                 currentUser: authenticatedSession.user,
             )
+            try activateEmbyServicesIfAvailable()
             embyHydrationError = nil
             loadingPhase = .libraries
-            status = .embyAuthenticated
+            status = .ready
         } catch {
             if let previousToken {
                 try? keychain.setString(previousToken, forKey: tokenKey)
             } else {
                 try? keychain.deleteValue(forKey: tokenKey)
             }
+            if let previousConnectionStoreState {
+                try? embyConnectionStore.save(previousConnectionStoreState)
+            }
+            if let previousProvider {
+                UserDefaults.standard.set(previousProvider, forKey: providerDefaultsKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: providerDefaultsKey)
+            }
+            provider = previousProvider.flatMap(MediaProvider.init(rawValue:))
             embyContext.reset()
+            mediaServices = nil
+            libraryStore.configure(service: nil)
             ErrorReporter.capture(error)
             throw error
         }
@@ -658,6 +671,8 @@ final class SessionManager {
 
     private func hydrateEmby() async {
         embyContext.reset()
+        mediaServices = nil
+        libraryStore.configure(service: nil)
         var connection: EmbyConnection?
 
         do {
@@ -676,9 +691,10 @@ final class SessionManager {
             embyContext.configure(connection: storedConnection, token: token)
             _ = try await embyContext.validateAuthenticatedSession()
             guard !Task.isCancelled else { return }
+            try activateEmbyServicesIfAvailable()
             embyHydrationError = nil
             loadingPhase = .libraries
-            status = .embyAuthenticated
+            status = .ready
         } catch let error as EmbyAPIError where error == .authenticationRequired {
             if let connection {
                 try? keychain.deleteValue(
@@ -686,13 +702,17 @@ final class SessionManager {
                 )
             }
             embyContext.reset()
+            mediaServices = nil
+            libraryStore.configure(service: nil)
             embyHydrationError = nil
             status = .needsEmbyAuthentication
         } catch {
             guard !Task.isCancelled, !error.isCancellation else { return }
             ErrorReporter.capture(error)
             embyContext.reset()
-            embyHydrationError = (error as? EmbyAPIError)?.localizedDescription
+            mediaServices = nil
+            libraryStore.configure(service: nil)
+            embyHydrationError = (error as? LocalizedError)?.errorDescription
                 ?? String(localized: "emby.errors.invalidResponse")
             status = .needsEmbyAuthentication
         }
@@ -818,6 +838,17 @@ final class SessionManager {
             context: jellyfinContext,
             capabilities: .jellyfin,
         ) else { return }
+        mediaServices = services
+        libraryStore.configure(service: services.library)
+    }
+
+    private func activateEmbyServicesIfAvailable() throws {
+        guard let services = EmbyMediaServicesFactory.make(
+            context: embyContext,
+            capabilities: .emby,
+        ) else {
+            throw EmbyServiceError.unavailable
+        }
         mediaServices = services
         libraryStore.configure(service: services.library)
     }

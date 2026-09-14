@@ -30,10 +30,6 @@ struct ContentView: View {
                 JellyfinAuthenticationView()
             case .needsEmbyAuthentication:
                 EmbyAuthenticationView()
-            case .embyAuthenticated:
-                ProgressView("startup.loading.libraries")
-                    .progressViewStyle(.circular)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             case .needsProfileSelection:
                 NavigationStack {
                     ProfileSwitcherView(
