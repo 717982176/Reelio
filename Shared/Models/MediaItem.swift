@@ -202,7 +202,7 @@ struct MediaItem: Identifiable, Hashable {
 
         case .series:
             switch provider {
-            case .jellyfin:
+            case .jellyfin, .emby:
                 return year.map(String.init)
             case .plex:
                 guard let childCount else { return nil }

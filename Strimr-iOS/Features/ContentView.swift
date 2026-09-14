@@ -38,6 +38,9 @@ struct ContentView: View {
                     NavigationStack {
                         JellyfinAuthenticationView()
                     }
+                case .needsEmbyAuthentication:
+                    // Phase 3 will route this status to the Emby authentication flow.
+                    ProviderSelectionView()
                 case .needsProfileSelection:
                     NavigationStack {
                         ProfileSwitcherView(

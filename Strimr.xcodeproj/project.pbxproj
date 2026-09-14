@@ -204,6 +204,7 @@
 				Networking/Seerr/SeerrAPI.swift,
 				Networking/Seerr/SeerrNetworkClient.swift,
 				Networking/Seerr/TMDBImageService.swift,
+				Providers/Emby/EmbySessionModels.swift,
 				Providers/Jellyfin/JellyfinCatalogService.swift,
 				Providers/Jellyfin/JellyfinFavoritesService.swift,
 				Providers/Jellyfin/JellyfinLiveTVService.swift,

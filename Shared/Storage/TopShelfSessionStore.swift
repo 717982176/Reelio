@@ -26,6 +26,13 @@ import Foundation
             userID: String?,
             token: String,
         ) throws {
+            switch provider {
+            case .plex, .jellyfin:
+                break
+            case .emby:
+                return
+            }
+
             guard let accessGroup = Bundle.main.object(forInfoDictionaryKey: "TopShelfKeychainAccessGroup") as? String,
                   !accessGroup.isEmpty
             else {

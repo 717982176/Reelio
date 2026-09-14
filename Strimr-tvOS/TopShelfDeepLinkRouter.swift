@@ -40,6 +40,12 @@ final class TopShelfDeepLinkRouter {
             .first(where: { $0.name == "provider" })?
             .value
             .flatMap { MediaProvider(rawValue: $0) } ?? .plex
+        switch provider {
+        case .plex, .jellyfin:
+            break
+        case .emby:
+            return
+        }
 
         pendingAction = Action(
             kind: kind,

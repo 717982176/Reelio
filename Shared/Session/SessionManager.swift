@@ -35,6 +35,7 @@ final class SessionManager {
         case needsProviderSelection
         case signedOut
         case needsJellyfinAuthentication
+        case needsEmbyAuthentication
         case needsProfileSelection
         case needsServerSelection
         case ready
@@ -117,11 +118,17 @@ final class SessionManager {
                 try await hydratePlex()
             case .jellyfin:
                 await hydrateJellyfin()
+            case .emby:
+                status = .needsEmbyAuthentication
             }
         } catch {
             guard !Task.isCancelled, !error.isCancellation else { return }
             await clearSession()
-            status = provider == .jellyfin ? .needsJellyfinAuthentication : .signedOut
+            if let provider {
+                status = authenticationStatus(for: provider)
+            } else {
+                status = .needsProviderSelection
+            }
         }
     }
 
@@ -141,6 +148,9 @@ final class SessionManager {
             }
         case .jellyfin:
             await hydrateJellyfin()
+        case .emby:
+            await clearSession()
+            status = .needsEmbyAuthentication
         }
     }
 
@@ -186,12 +196,19 @@ final class SessionManager {
     }
 
     func signOut() async {
-        if provider == .jellyfin {
+        switch provider {
+        case .some(.jellyfin):
             await signOutJellyfin()
-        } else {
+        case .some(.plex), .none:
             await clearSession()
             try? keychain.deleteValue(forKey: tokenKey)
             UserDefaults.standard.removeObject(forKey: serverIdDefaultsKey)
+            #if os(tvOS)
+                topShelfSessionStore.clear()
+                TVTopShelfContentProvider.topShelfContentDidChange()
+            #endif
+        case .some(.emby):
+            await clearSession()
             #if os(tvOS)
                 topShelfSessionStore.clear()
                 TVTopShelfContentProvider.topShelfContentDidChange()
@@ -493,6 +510,17 @@ final class SessionManager {
         context.reset()
         mediaServices = nil
         libraryStore.configure(service: nil)
+    }
+
+    private func authenticationStatus(for provider: MediaProvider) -> Status {
+        switch provider {
+        case .plex:
+            .signedOut
+        case .jellyfin:
+            .needsJellyfinAuthentication
+        case .emby:
+            .needsEmbyAuthentication
+        }
     }
 
     private func storedProvider() throws -> MediaProvider? {

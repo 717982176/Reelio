@@ -3,6 +3,7 @@ import Foundation
 enum MediaProvider: String, Codable, Hashable, Sendable {
     case plex
     case jellyfin
+    case emby
 }
 
 struct ServerIdentity: Codable, Hashable, Sendable {
@@ -48,6 +49,20 @@ struct ProviderCapabilities: Codable, Equatable, Sendable {
     let sharePlay: Bool
     let topShelf: Bool
     let syncPlay: Bool
+
+    static let emby = ProviderCapabilities(
+        profiles: false,
+        multiServerSearch: false,
+        cloudWatchlist: false,
+        favorites: true,
+        remoteSubtitleSearch: false,
+        trickplay: false,
+        skipSegments: false,
+        downloads: false,
+        sharePlay: false,
+        topShelf: false,
+        syncPlay: false,
+    )
 
     static let jellyfin = ProviderCapabilities(
         profiles: false,
