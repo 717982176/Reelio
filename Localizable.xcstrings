@@ -2441,19 +2441,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Uses your connected Strimr Plex account."
+            "value" : "Uses your connected Reelio Plex account."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Utilise votre compte Plex connecté à Strimr."
+            "value" : "Utilise votre compte Plex connecté à Reelio."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使用您连接到 Strimr 的 Plex 账户。"
+            "value" : "使用您连接到 Reelio 的 Plex 账户。"
           }
         }
       }
@@ -8608,19 +8608,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Strimr could not reconnect to your Plex server. Check your connection and try again."
+            "value" : "Reelio could not reconnect to your Plex server. Check your connection and try again."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Strimr n’a pas pu se reconnecter à votre serveur Plex. Vérifiez votre connexion et réessayez."
+            "value" : "Reelio n’a pas pu se reconnecter à votre serveur Plex. Vérifiez votre connexion et réessayez."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Strimr 无法重新连接到您的 Plex 服务器。请检查网络连接后重试。"
+            "value" : "Reelio 无法重新连接到您的 Plex 服务器。请检查网络连接后重试。"
           }
         }
       }
@@ -9269,19 +9269,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose the media service you want to use with Strimr."
+            "value" : "Choose the media service you want to use with Reelio."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choisissez le service multimédia à utiliser avec Strimr."
+            "value" : "Choisissez le service multimédia à utiliser avec Reelio."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择您想要与 Strimr 配合使用的媒体服务。"
+            "value" : "选择您想要与 Reelio 配合使用的媒体服务。"
           }
         }
       }
@@ -11205,19 +11205,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Strimr couldn’t connect using this address. Check it and try again."
+            "value" : "Reelio couldn’t connect using this address. Check it and try again."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Strimr n’a pas pu se connecter avec cette adresse. Vérifiez-la et réessayez."
+            "value" : "Reelio n’a pas pu se connecter avec cette adresse. Vérifiez-la et réessayez."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Strimr 无法使用此地址连接。请检查后重试。"
+            "value" : "Reelio 无法使用此地址连接。请检查后重试。"
           }
         }
       }
@@ -11389,19 +11389,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "If this device is on the same network as the server, make sure Local Network access is allowed for Strimr. Otherwise, enable Remote Access in Plex."
+            "value" : "If this device is on the same network as the server, make sure Local Network access is allowed for Reelio. Otherwise, enable Remote Access in Plex."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Si cet appareil est sur le même réseau que le serveur, vérifiez que l’accès au réseau local est autorisé pour Strimr. Sinon, activez l’accès à distance dans Plex."
+            "value" : "Si cet appareil est sur le même réseau que le serveur, vérifiez que l’accès au réseau local est autorisé pour Reelio. Sinon, activez l’accès à distance dans Plex."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "如果此设备与服务器位于同一网络，请确保已允许 Strimr 访问本地网络。否则，请在 Plex 中启用远程访问。"
+            "value" : "如果此设备与服务器位于同一网络，请确保已允许 Reelio 访问本地网络。否则，请在 Plex 中启用远程访问。"
           }
         }
       }
@@ -12257,19 +12257,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "When server-provided thumbnails aren’t available, Strimr can load previews from the video. This may use additional network data and device resources."
+            "value" : "When server-provided thumbnails aren’t available, Reelio can load previews from the video. This may use additional network data and device resources."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lorsque les miniatures fournies par le serveur ne sont pas disponibles, Strimr peut charger des aperçus depuis la vidéo. Cela peut utiliser davantage de données réseau et de ressources de l’appareil."
+            "value" : "Lorsque les miniatures fournies par le serveur ne sont pas disponibles, Reelio peut charger des aperçus depuis la vidéo. Cela peut utiliser davantage de données réseau et de ressources de l’appareil."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "服务器提供的缩略图不可用时，Strimr 可以从视频中加载预览。这可能会使用额外的网络流量和设备资源。"
+            "value" : "服务器提供的缩略图不可用时，Reelio 可以从视频中加载预览。这可能会使用额外的网络流量和设备资源。"
           }
         }
       }
@@ -12587,19 +12587,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Show image previews while moving through the playback timeline. Strimr uses thumbnails provided by your media server when available."
+            "value" : "Show image previews while moving through the playback timeline. Reelio uses thumbnails provided by your media server when available."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Affiche des aperçus d’image lorsque vous parcourez la timeline de lecture. Strimr utilise les miniatures fournies par votre serveur multimédia lorsqu’elles sont disponibles."
+            "value" : "Affiche des aperçus d’image lorsque vous parcourez la timeline de lecture. Reelio utilise les miniatures fournies par votre serveur multimédia lorsqu’elles sont disponibles."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在播放时间线上移动时显示图像预览。Strimr 会优先使用您的媒体服务器提供的缩略图。"
+            "value" : "在播放时间线上移动时显示图像预览。Reelio 会优先使用您的媒体服务器提供的缩略图。"
           }
         }
       }
@@ -13247,19 +13247,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Preserves authored fonts, colors, animation, and positioning. Strimr's appearance settings are used when this is off."
+            "value" : "Preserves authored fonts, colors, animation, and positioning. Reelio's appearance settings are used when this is off."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conserve les polices, couleurs, animations et positions d’origine. Les réglages d’apparence de Strimr sont utilisés lorsque cette option est désactivée."
+            "value" : "Conserve les polices, couleurs, animations et positions d’origine. Les réglages d’apparence de Reelio sont utilisés lorsque cette option est désactivée."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "保留原始字体、颜色、动画和位置。关闭后将使用 Strimr 的字幕外观设置。"
+            "value" : "保留原始字体、颜色、动画和位置。关闭后将使用 Reelio 的字幕外观设置。"
           }
         }
       }
@@ -13489,19 +13489,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Watch together in Strimr"
+            "value" : "Watch together in Reelio"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Regarder ensemble dans Strimr"
+            "value" : "Regarder ensemble dans Reelio"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在 Strimr 中一起观看"
+            "value" : "在 Reelio 中一起观看"
           }
         }
       }
@@ -14025,24 +14025,24 @@
         }
       }
     },
-    "Strimr" : {
+    "Reelio" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Strimr"
+            "value" : "Reelio"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Strimr"
+            "value" : "Reelio"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Strimr"
+            "value" : "Reelio"
           }
         }
       }

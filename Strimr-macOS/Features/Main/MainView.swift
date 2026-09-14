@@ -53,7 +53,7 @@ struct MainView: View {
                     sidebarLabel("settings.title", systemImage: "gearshape.fill", item: .settings)
                 }
             }
-            .navigationTitle("Strimr")
+            .navigationTitle("Reelio")
             .listStyle(.sidebar)
         } detail: {
             NavigationStack(path: appModel.pathBinding(for: appModel.selection)) {
@@ -134,7 +134,7 @@ struct MainView: View {
             }
         } label: {
             Label(
-                sessionManager.user?.friendlyName ?? sessionManager.user?.title ?? "Strimr",
+                sessionManager.user?.friendlyName ?? sessionManager.user?.title ?? "Reelio",
                 systemImage: "person.crop.circle",
             )
         }
