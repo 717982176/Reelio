@@ -411,7 +411,7 @@ final class EmbyAPIContext {
     ) throws -> URL {
         var url = apiBaseURL
         for component in path {
-            url.append(path: component)
+            url.append(component: component)
         }
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             throw EmbyAPIError.invalidServerURL

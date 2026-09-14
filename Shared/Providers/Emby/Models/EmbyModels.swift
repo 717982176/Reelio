@@ -83,6 +83,45 @@ nonisolated struct EmbyUserData: Decodable, Hashable, Sendable {
     }
 }
 
+nonisolated struct EmbyPersonInfo: Decodable, Hashable, Sendable {
+    let name: String
+    let id: String?
+    let role: String?
+    let type: String?
+    let primaryImageTag: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case name = "Name"
+        case id = "Id"
+        case role = "Role"
+        case type = "Type"
+        case primaryImageTag = "PrimaryImageTag"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        if let stringId = try? container.decodeIfPresent(String.self, forKey: .id) {
+            id = stringId
+        } else if let intId = try? container.decodeIfPresent(Int.self, forKey: .id) {
+            id = String(intId)
+        } else {
+            id = nil
+        }
+        role = try container.decodeIfPresent(String.self, forKey: .role)
+        type = try container.decodeIfPresent(String.self, forKey: .type)
+        primaryImageTag = try container.decodeIfPresent(String.self, forKey: .primaryImageTag)
+    }
+
+    init(name: String, id: String? = nil, role: String? = nil, type: String? = nil, primaryImageTag: String? = nil) {
+        self.name = name
+        self.id = id
+        self.role = role
+        self.type = type
+        self.primaryImageTag = primaryImageTag
+    }
+}
+
 nonisolated struct EmbyItem: Decodable, Identifiable, Hashable, Sendable {
     let id: String
     let name: String?
@@ -108,6 +147,13 @@ nonisolated struct EmbyItem: Decodable, Identifiable, Hashable, Sendable {
     let imageTags: [String: String]?
     let backdropImageTags: [String]?
     let seriesPrimaryImageTag: String?
+    let people: [EmbyPersonInfo]?
+    let providerIDs: [String: String]?
+    let premiereDate: String?
+    let dateCreated: String?
+    let primaryImageAspectRatio: Double?
+    let parentBackdropItemID: String?
+    let parentBackdropImageTags: [String]?
     let userData: EmbyUserData?
 
     private enum CodingKeys: String, CodingKey {
@@ -135,6 +181,13 @@ nonisolated struct EmbyItem: Decodable, Identifiable, Hashable, Sendable {
         case imageTags = "ImageTags"
         case backdropImageTags = "BackdropImageTags"
         case seriesPrimaryImageTag = "SeriesPrimaryImageTag"
+        case people = "People"
+        case providerIDs = "ProviderIds"
+        case premiereDate = "PremiereDate"
+        case dateCreated = "DateCreated"
+        case primaryImageAspectRatio = "PrimaryImageAspectRatio"
+        case parentBackdropItemID = "ParentBackdropItemId"
+        case parentBackdropImageTags = "ParentBackdropImageTags"
         case userData = "UserData"
     }
 

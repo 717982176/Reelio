@@ -23,12 +23,25 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
     private let context: EmbyAPIContext
     private let catalog: EmbyCatalogService
     private let server: ServerIdentity
+    private var personIDToName: [String: String] = [:]
     weak var services: MediaServices?
 
     init(context: EmbyAPIContext, server: ServerIdentity) {
         self.context = context
         self.server = server
         catalog = EmbyCatalogService(context: context)
+    }
+
+    private func cachePersonNames(from people: [EmbyPersonInfo]?) {
+        guard let people else { return }
+        for person in people {
+            guard !person.name.isEmpty else { continue }
+            if let id = person.id, !id.isEmpty {
+                personIDToName[id] = person.name
+            } else {
+                personIDToName[person.name] = person.name
+            }
+        }
     }
 
     // MARK: - MediaAuthorizationService
@@ -228,31 +241,62 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
     }
 
     func artwork(path: String?, width: Int?, height: Int?) async throws -> ArtworkResource? {
-        guard let path, let descriptor = EmbyArtworkPath.parse(path) else { return nil }
-        var query = [URLQueryItem(name: "quality", value: "90")]
-        if let tag = descriptor.tag {
-            query.append(URLQueryItem(name: "tag", value: tag))
+        guard let path else { return nil }
+        if let descriptor = EmbyArtworkPath.parse(path) {
+            var query = [URLQueryItem(name: "quality", value: "90")]
+            if let tag = descriptor.tag {
+                query.append(URLQueryItem(name: "tag", value: tag))
+            }
+            if let width {
+                query.append(URLQueryItem(name: "maxWidth", value: String(width)))
+            }
+            if let height {
+                query.append(URLQueryItem(name: "maxHeight", value: String(height)))
+            }
+            let data = try await context.rawData(
+                path: ["Items", descriptor.ownerID, "Images", descriptor.type],
+                query: query,
+            )
+            return .data(data)
+        } else if let personDescriptor = EmbyPersonArtworkPath.parse(path) {
+            var query = [URLQueryItem(name: "quality", value: "90")]
+            if let tag = personDescriptor.tag {
+                query.append(URLQueryItem(name: "tag", value: tag))
+            }
+            if let width {
+                query.append(URLQueryItem(name: "maxWidth", value: String(width)))
+            }
+            if let height {
+                query.append(URLQueryItem(name: "maxHeight", value: String(height)))
+            }
+            let data = try await context.rawData(
+                path: ["Persons", personDescriptor.name, "Images", personDescriptor.type],
+                query: query,
+            )
+            return .data(data)
         }
-        if let width {
-            query.append(URLQueryItem(name: "maxWidth", value: String(width)))
-        }
-        if let height {
-            query.append(URLQueryItem(name: "maxHeight", value: String(height)))
-        }
-        let data = try await context.rawData(
-            path: ["Items", descriptor.ownerID, "Images", descriptor.type],
-            query: query,
-        )
-        return .data(data)
+        return nil
     }
 
-    // MARK: - MediaSearchService (Deferred - Phase 5)
+    // MARK: - MediaSearchService
 
-    func search(query _: String, kinds _: Set<MediaKind>, searchesAllServers _: Bool) async throws -> [MediaSearchSource] {
-        throw EmbyServiceError.unsupportedOperation
+    func search(query: String, kinds: Set<MediaKind>, searchesAllServers _: Bool) async throws -> [MediaSearchSource] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let items = try await catalog.search(query: trimmed, kinds: kinds)
+        guard let services else { return [] }
+        return items.compactMap { item in
+            guard let display = MediaDisplayItem(embyItem: item, server: server) else { return nil }
+            return MediaSearchSource(
+                serverIdentifier: server.id,
+                serverName: context.connection?.serverName ?? server.id,
+                media: display,
+                services: services,
+            )
+        }
     }
 
-    // MARK: - MediaDetailService (Deferred - Phase 5)
+    // MARK: - MediaDetailService
 
     var supportsWatchlist: Bool { false }
     var supportsRemoteSubtitleSearch: Bool { false }
@@ -260,6 +304,7 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
 
     func mediaItem(id: String) async throws -> MediaItem {
         let item = try await catalog.item(id: id)
+        cachePersonNames(from: item.people)
         return MediaItem(embyItem: item, server: server)
     }
 
@@ -271,24 +316,130 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
         throw EmbyServiceError.unsupportedOperation
     }
 
-    func details(for _: MediaItem) async throws -> MediaDetailContent {
-        throw EmbyServiceError.unsupportedOperation
+    func details(for media: MediaItem) async throws -> MediaDetailContent {
+        let item = try await catalog.item(id: media.id)
+        cachePersonNames(from: item.people)
+        let mappedMedia = MediaItem(embyItem: item, server: server)
+
+        let seasons: [MediaItem]
+        let episodes: [MediaItem]
+        let parentSeries: MediaItem?
+        let onDeck: MediaItem?
+
+        switch item.kind {
+        case .series:
+            let seasonItems = try await catalog.seasons(seriesID: item.id)
+            seasons = seasonItems.map { MediaItem(embyItem: $0, server: server) }
+            episodes = []
+            parentSeries = nil
+            let nextUp = try await catalog.nextUp(seriesID: item.id, limit: 1)
+            onDeck = nextUp.first.map { MediaItem(embyItem: $0, server: server) }
+
+        case .season:
+            guard let seriesID = item.seriesID ?? item.parentID else {
+                throw EmbyServiceError.unavailable
+            }
+            let seriesItem = try? await catalog.item(id: seriesID)
+            cachePersonNames(from: seriesItem?.people)
+            parentSeries = seriesItem.map { MediaItem(embyItem: $0, server: server) }
+            let nextUp = try await catalog.nextUp(seriesID: seriesID, limit: 1)
+            onDeck = nextUp.first.map { MediaItem(embyItem: $0, server: server) }
+            seasons = []
+            let episodeItems = try await catalog.episodes(seriesID: seriesID, seasonID: item.id)
+            episodes = episodeItems.map { MediaItem(embyItem: $0, server: server) }
+
+        case .episode:
+            let seriesID = item.seriesID
+            if let seriesID {
+                let seriesItem = try? await catalog.item(id: seriesID)
+                cachePersonNames(from: seriesItem?.people)
+                parentSeries = seriesItem.map { MediaItem(embyItem: $0, server: server) }
+                let nextUp = try await catalog.nextUp(seriesID: seriesID, limit: 1)
+                onDeck = nextUp.first.map { MediaItem(embyItem: $0, server: server) }
+            } else if let parentID = item.parentID {
+                let seasonItem = try? await catalog.item(id: parentID)
+                if let seasonSeriesID = seasonItem?.seriesID {
+                    let seriesItem = try? await catalog.item(id: seasonSeriesID)
+                    cachePersonNames(from: seriesItem?.people)
+                    parentSeries = seriesItem.map { MediaItem(embyItem: $0, server: server) }
+                    let nextUp = try await catalog.nextUp(seriesID: seasonSeriesID, limit: 1)
+                    onDeck = nextUp.first.map { MediaItem(embyItem: $0, server: server) }
+                } else {
+                    parentSeries = nil
+                    onDeck = nil
+                }
+            } else {
+                parentSeries = nil
+                onDeck = nil
+            }
+            seasons = []
+            episodes = []
+
+        case .movie, .boxSet, .playlist, .folder, .collectionFolder, .userView, .unknown:
+            seasons = []
+            episodes = []
+            parentSeries = nil
+            onDeck = nil
+        }
+
+        let people = item.people ?? []
+        let actors = people.filter { person in
+            guard let type = person.type?.lowercased() else { return true }
+            return type == "actor" || type == "gueststar"
+        }
+        let castPeople = actors.isEmpty ? people : actors
+        let cast = castPeople.compactMap(CastMember.init)
+
+        let similarItems = (try? await catalog.similar(itemID: item.id, limit: 20)) ?? []
+        let similarDisplay = similarItems.compactMap { MediaDisplayItem(embyItem: $0, server: server) }
+        let relatedHubs: [Hub]
+        if !similarDisplay.isEmpty {
+            relatedHubs = [
+                Hub(
+                    id: "emby.similar.\(item.id)",
+                    key: "emby.similar.\(item.id)",
+                    hubKey: "emby.similar.\(item.id)",
+                    title: String(localized: "emby.detail.similar"),
+                    size: similarDisplay.count,
+                    more: false,
+                    items: similarDisplay,
+                ),
+            ]
+        } else {
+            relatedHubs = []
+        }
+
+        return MediaDetailContent(
+            media: mappedMedia,
+            parentSeries: parentSeries,
+            onDeck: onDeck,
+            seasons: seasons,
+            episodes: episodes,
+            cast: cast,
+            relatedHubs: relatedHubs,
+        )
     }
 
-    func seasons(for _: MediaItem) async throws -> [MediaItem] {
-        throw EmbyServiceError.unsupportedOperation
+    func seasons(for series: MediaItem) async throws -> [MediaItem] {
+        let items = try await catalog.seasons(seriesID: series.id)
+        return items.map { MediaItem(embyItem: $0, server: server) }
     }
 
-    func episodes(for _: MediaItem, seriesID _: String?) async throws -> [MediaItem] {
-        throw EmbyServiceError.unsupportedOperation
+    func episodes(for season: MediaItem, seriesID: String?) async throws -> [MediaItem] {
+        guard let targetSeriesID = seriesID ?? season.grandparentRatingKey ?? season.parentRatingKey else {
+            throw EmbyServiceError.unavailable
+        }
+        let items = try await catalog.episodes(seriesID: targetSeriesID, seasonID: season.id)
+        return items.map { MediaItem(embyItem: $0, server: server) }
     }
 
-    func allEpisodes(for _: MediaItem) async throws -> [MediaItem] {
-        throw EmbyServiceError.unsupportedOperation
+    func allEpisodes(for series: MediaItem) async throws -> [MediaItem] {
+        let items = try await catalog.episodes(seriesID: series.id, seasonID: nil)
+        return items.map { MediaItem(embyItem: $0, server: server) }
     }
 
-    func setPlayed(_: Bool, itemID _: String) async throws {
-        throw EmbyServiceError.unsupportedOperation
+    func setPlayed(_ played: Bool, itemID: String) async throws {
+        try await catalog.setPlayed(played, itemID: itemID)
     }
 
     func isWatchlisted(_: MediaItem) async throws -> Bool {
@@ -311,20 +462,27 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
         throw EmbyServiceError.unsupportedOperation
     }
 
-    func collectionItems(id _: String) async throws -> [MediaDisplayItem] {
-        throw EmbyServiceError.unsupportedOperation
+    func collectionItems(id: String) async throws -> [MediaDisplayItem] {
+        let items = try await catalog.collectionItems(collectionID: id)
+        return items.compactMap { MediaDisplayItem(embyItem: $0, server: server) }
     }
 
-    func playlistItems(id _: String) async throws -> [MediaDisplayItem] {
-        throw EmbyServiceError.unsupportedOperation
+    func playlistItems(id: String) async throws -> [MediaDisplayItem] {
+        let items = try await catalog.playlistItems(playlistID: id)
+        return items.compactMap { MediaDisplayItem(embyItem: $0, server: server) }
     }
 
-    func person(id _: String) async throws -> Person {
-        throw EmbyServiceError.unsupportedOperation
+    func person(id: String) async throws -> Person {
+        guard let name = personIDToName[id] else {
+            throw EmbyServiceError.unavailable
+        }
+        let item = try await catalog.person(name: name)
+        return Person(embyItem: item)
     }
 
-    func personMedia(id _: String) async throws -> [MediaDisplayItem] {
-        throw EmbyServiceError.unsupportedOperation
+    func personMedia(id: String) async throws -> [MediaDisplayItem] {
+        let items = try await catalog.personMedia(personID: id)
+        return items.compactMap { MediaDisplayItem(embyItem: $0, server: server) }
     }
 
     // MARK: - MediaPlaybackService (Deferred - Phase 6)

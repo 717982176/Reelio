@@ -3,6 +3,7 @@ import Foundation
 @MainActor
 struct EmbyCatalogService {
     static let cardFields = "Overview,Genres,Studios,Taglines,ChildCount,RecursiveItemCount,ParentId,SeriesId,SeriesName,SeasonName,ParentIndexNumber,IndexNumber,CommunityRating,CriticRating,OfficialRating,RunTimeTicks"
+    static let detailFields = "Overview,Genres,Studios,Taglines,ChildCount,RecursiveItemCount,ParentId,SeriesId,SeriesName,SeasonName,ParentIndexNumber,IndexNumber,CommunityRating,CriticRating,OfficialRating,RunTimeTicks,DateCreated,PremiereDate,People,ProviderIds,PrimaryImageAspectRatio,ParentBackdropItemId,ParentBackdropImageTags"
 
     private let context: EmbyAPIContext
 
@@ -73,7 +74,7 @@ struct EmbyCatalogService {
         return try await context.get(
             path: ["Users", userID, "Items", id],
             query: [
-                URLQueryItem(name: "Fields", value: Self.cardFields),
+                URLQueryItem(name: "Fields", value: Self.detailFields),
                 URLQueryItem(name: "EnableUserData", value: "true"),
                 URLQueryItem(name: "EnableImages", value: "true"),
             ],
@@ -158,5 +159,148 @@ struct EmbyCatalogService {
             limit: limit,
         )
         return result.items
+    }
+
+    func seasons(seriesID: String) async throws -> [EmbyItem] {
+        let userID = try currentUserID
+        let response: EmbyQueryResult<EmbyItem> = try await context.get(
+            path: ["Shows", seriesID, "Seasons"],
+            query: [
+                URLQueryItem(name: "UserId", value: userID),
+                URLQueryItem(name: "Fields", value: Self.detailFields),
+                URLQueryItem(name: "EnableUserData", value: "true"),
+                URLQueryItem(name: "EnableImages", value: "true"),
+            ],
+        )
+        return response.items
+    }
+
+    func episodes(seriesID: String, seasonID: String? = nil) async throws -> [EmbyItem] {
+        let userID = try currentUserID
+        var query = [
+            URLQueryItem(name: "UserId", value: userID),
+            URLQueryItem(name: "Fields", value: Self.detailFields),
+            URLQueryItem(name: "EnableUserData", value: "true"),
+            URLQueryItem(name: "EnableImages", value: "true"),
+        ]
+        if let seasonID {
+            query.append(URLQueryItem(name: "SeasonId", value: seasonID))
+        }
+        let response: EmbyQueryResult<EmbyItem> = try await context.get(
+            path: ["Shows", seriesID, "Episodes"],
+            query: query,
+        )
+        return response.items
+    }
+
+    func similar(itemID: String, limit: Int = 20) async throws -> [EmbyItem] {
+        let userID = try currentUserID
+        let response: EmbyQueryResult<EmbyItem> = try await context.get(
+            path: ["Items", itemID, "Similar"],
+            query: [
+                URLQueryItem(name: "UserId", value: userID),
+                URLQueryItem(name: "Limit", value: String(limit)),
+                URLQueryItem(name: "Fields", value: Self.cardFields),
+                URLQueryItem(name: "EnableUserData", value: "true"),
+                URLQueryItem(name: "EnableImages", value: "true"),
+            ],
+        )
+        return response.items
+    }
+
+    func collectionItems(collectionID: String, limit: Int = 200) async throws -> [EmbyItem] {
+        let userID = try currentUserID
+        let response: EmbyQueryResult<EmbyItem> = try await context.get(
+            path: ["Users", userID, "Items"],
+            query: [
+                URLQueryItem(name: "ParentId", value: collectionID),
+                URLQueryItem(name: "Recursive", value: "false"),
+                URLQueryItem(name: "Limit", value: String(limit)),
+                URLQueryItem(name: "Fields", value: Self.cardFields),
+                URLQueryItem(name: "EnableUserData", value: "true"),
+                URLQueryItem(name: "EnableImages", value: "true"),
+            ],
+        )
+        return response.items
+    }
+
+    func playlistItems(playlistID: String, limit: Int = 200) async throws -> [EmbyItem] {
+        let userID = try currentUserID
+        let response: EmbyQueryResult<EmbyItem> = try await context.get(
+            path: ["Playlists", playlistID, "Items"],
+            query: [
+                URLQueryItem(name: "UserId", value: userID),
+                URLQueryItem(name: "Limit", value: String(limit)),
+                URLQueryItem(name: "Fields", value: Self.cardFields),
+                URLQueryItem(name: "EnableUserData", value: "true"),
+                URLQueryItem(name: "EnableImages", value: "true"),
+            ],
+        )
+        return response.items
+    }
+
+    func person(name: String) async throws -> EmbyItem {
+        try await context.get(
+            path: ["Persons", name],
+            query: [],
+        )
+    }
+
+    func personMedia(personID: String, limit: Int = 100) async throws -> [EmbyItem] {
+        let userID = try currentUserID
+        let response: EmbyQueryResult<EmbyItem> = try await context.get(
+            path: ["Users", userID, "Items"],
+            query: [
+                URLQueryItem(name: "PersonIds", value: personID),
+                URLQueryItem(name: "Recursive", value: "true"),
+                URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series,Episode"),
+                URLQueryItem(name: "Limit", value: String(limit)),
+                URLQueryItem(name: "Fields", value: Self.cardFields),
+                URLQueryItem(name: "EnableUserData", value: "true"),
+                URLQueryItem(name: "EnableImages", value: "true"),
+            ],
+        )
+        return response.items
+    }
+
+    func setPlayed(_ played: Bool, itemID: String) async throws {
+        let userID = try currentUserID
+        let path = ["Users", userID, "PlayedItems", itemID]
+        if played {
+            try await context.send(path: path, method: "POST")
+        } else {
+            try await context.send(path: path, method: "DELETE")
+        }
+    }
+
+    func search(query: String, kinds: Set<MediaKind>, limit: Int = 100) async throws -> [EmbyItem] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let userID = try currentUserID
+
+        var types: [String] = []
+        if kinds.contains(.movie) { types.append("Movie") }
+        if kinds.contains(.series) { types.append("Series") }
+        if kinds.contains(.season) { types.append("Season") }
+        if kinds.contains(.episode) { types.append("Episode") }
+        if kinds.contains(.collection) { types.append("BoxSet") }
+        if kinds.contains(.playlist) { types.append("Playlist") }
+        if types.isEmpty {
+            types = ["Movie", "Series", "Episode"]
+        }
+
+        let response: EmbyQueryResult<EmbyItem> = try await context.get(
+            path: ["Users", userID, "Items"],
+            query: [
+                URLQueryItem(name: "SearchTerm", value: trimmed),
+                URLQueryItem(name: "Recursive", value: "true"),
+                URLQueryItem(name: "IncludeItemTypes", value: types.joined(separator: ",")),
+                URLQueryItem(name: "Limit", value: String(limit)),
+                URLQueryItem(name: "Fields", value: Self.cardFields),
+                URLQueryItem(name: "EnableUserData", value: "true"),
+                URLQueryItem(name: "EnableImages", value: "true"),
+            ],
+        )
+        return response.items
     }
 }

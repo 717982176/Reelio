@@ -1529,6 +1529,28 @@
         }
       }
     },
+    "emby.detail.similar" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Similar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Similaires"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相似内容"
+          }
+        }
+      }
+    },
     "emby.home.latestIn %@" : {
       "localizations" : {
         "en" : {

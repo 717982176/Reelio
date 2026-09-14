@@ -34,6 +34,35 @@ enum EmbyArtworkPath {
     }
 }
 
+enum EmbyPersonArtworkPath {
+    static func make(name: String, type: String = "Primary", tag: String?) -> String? {
+        guard tag != nil, !name.isEmpty, !type.isEmpty else { return nil }
+        var components = URLComponents()
+        components.scheme = "emby-person-artwork"
+        components.host = "person"
+        components.path = "/\(type)"
+        var queryItems = [URLQueryItem(name: "name", value: name)]
+        if let tag, !tag.isEmpty {
+            queryItems.append(URLQueryItem(name: "tag", value: tag))
+        }
+        components.queryItems = queryItems
+        return components.string
+    }
+
+    static func parse(_ value: String) -> (name: String, type: String, tag: String?)? {
+        guard let components = URLComponents(string: value),
+              components.scheme == "emby-person-artwork"
+        else { return nil }
+        let type = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !type.isEmpty else { return nil }
+        guard let name = components.queryItems?.first(where: { $0.name == "name" })?.value, !name.isEmpty else {
+            return nil
+        }
+        let tag = components.queryItems?.first(where: { $0.name == "tag" })?.value
+        return (name, type, tag)
+    }
+}
+
 extension MediaItem {
     init(embyItem: EmbyItem, server: ServerIdentity) {
         let type = embyItem.kind.mediaKind
@@ -47,6 +76,18 @@ extension MediaItem {
             type: "Backdrop",
             tag: embyItem.backdropImageTags?.first,
         )
+        let parentBackdropPath: String? = if let parentID = embyItem.parentBackdropItemID ?? embyItem.seriesID ?? embyItem.parentID,
+                                             let parentTag = embyItem.parentBackdropImageTags?.first
+        {
+            EmbyArtworkPath.make(
+                ownerID: parentID,
+                type: "Backdrop",
+                tag: parentTag,
+            )
+        } else {
+            nil
+        }
+        let effectiveBackdropPath = backdropPath ?? parentBackdropPath
         let seriesPath = EmbyArtworkPath.make(
             ownerID: embyItem.seriesID ?? embyItem.id,
             type: "Primary",
@@ -78,7 +119,7 @@ extension MediaItem {
             studio: embyItem.studios?.first?.name,
             tagline: embyItem.taglines?.first,
             thumbPath: primaryPath,
-            artPath: backdropPath ?? primaryPath,
+            artPath: effectiveBackdropPath ?? primaryPath,
             artworkCornerColors: nil,
             viewOffset: resumePosition,
             viewCount: embyItem.userData?.played == true ? max(1, embyItem.userData?.playCount ?? 1) : 0,
@@ -97,7 +138,7 @@ extension MediaItem {
             parentIndex: embyItem.parentIndexNumber,
             index: embyItem.indexNumber,
             grandparentThumbPath: seriesPath,
-            grandparentArtPath: backdropPath,
+            grandparentArtPath: effectiveBackdropPath,
             parentThumbPath: nil,
         )
     }
@@ -169,6 +210,39 @@ extension Library {
             id: embyItem.id,
             title: embyItem.name ?? "",
             type: kind,
+        )
+    }
+}
+
+extension CastMember {
+    init?(embyPerson: EmbyPersonInfo) {
+        guard !embyPerson.name.isEmpty else { return nil }
+        let thumb = EmbyPersonArtworkPath.make(
+            name: embyPerson.name,
+            type: "Primary",
+            tag: embyPerson.primaryImageTag,
+        )
+        self.init(
+            id: embyPerson.id ?? embyPerson.name,
+            personID: embyPerson.id ?? embyPerson.name,
+            name: embyPerson.name,
+            character: embyPerson.role,
+            thumbPath: thumb,
+        )
+    }
+}
+
+extension Person {
+    init(embyItem: EmbyItem) {
+        let thumb = EmbyPersonArtworkPath.make(
+            name: embyItem.name ?? "",
+            type: "Primary",
+            tag: embyItem.imageTags?["Primary"],
+        )
+        self.init(
+            id: embyItem.id,
+            name: embyItem.name ?? "",
+            thumbPath: thumb,
         )
     }
 }
