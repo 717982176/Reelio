@@ -1,27 +1,51 @@
 import Foundation
 
 nonisolated struct EmbyDirectPlayProfile: Encodable, Sendable {
-    let Container: String
-    let Type: String
-    let VideoCodec: String?
-    let AudioCodec: String?
+    let container: String
+    let type: String
+    let videoCodec: String?
+    let audioCodec: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case container = "Container"
+        case type = "Type"
+        case videoCodec = "VideoCodec"
+        case audioCodec = "AudioCodec"
+    }
 }
 
 nonisolated struct EmbyTranscodingProfile: Encodable, Sendable {
-    let Container: String
-    let Type: String
-    let VideoCodec: String?
-    let AudioCodec: String?
-    let Protocol: String?
-    let Context: String?
-    let EstimateContentLength: Bool?
-    let MinSegments: Int?
-    let SegmentLength: Int?
+    let container: String
+    let type: String
+    let videoCodec: String?
+    let audioCodec: String?
+    let protocolName: String?
+    let context: String?
+    let estimateContentLength: Bool?
+    let minSegments: Int?
+    let segmentLength: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case container = "Container"
+        case type = "Type"
+        case videoCodec = "VideoCodec"
+        case audioCodec = "AudioCodec"
+        case protocolName = "Protocol"
+        case context = "Context"
+        case estimateContentLength = "EstimateContentLength"
+        case minSegments = "MinSegments"
+        case segmentLength = "SegmentLength"
+    }
 }
 
 nonisolated struct EmbySubtitleProfile: Encodable, Sendable {
-    let Format: String
-    let Method: String
+    let format: String
+    let method: String
+
+    private enum CodingKeys: String, CodingKey {
+        case format = "Format"
+        case method = "Method"
+    }
 }
 
 nonisolated struct EmbyDeviceProfile: Encodable, Sendable {
@@ -36,35 +60,35 @@ nonisolated struct EmbyDeviceProfile: Encodable, Sendable {
             MaxStreamingBitrate: maxBitrate,
             DirectPlayProfiles: [
                 EmbyDirectPlayProfile(
-                    Container: "mp4,m4v,mov,mkv,webm,ts",
-                    Type: "Video",
-                    VideoCodec: "h264,hevc,vp9,av1,mpeg4,mpeg2video",
-                    AudioCodec: "aac,mp3,ac3,eac3,opus,flac,alac,vorbis,truehd,dts"
+                    container: "mp4,m4v,mov,mkv,webm,ts",
+                    type: "Video",
+                    videoCodec: "h264,hevc,vp9,av1,mpeg4,mpeg2video",
+                    audioCodec: "aac,mp3,ac3,eac3,opus,flac,alac,vorbis,truehd,dts"
                 ),
                 EmbyDirectPlayProfile(
-                    Container: "mp3,flac,aac,m4a,alac,wav,ogg,opus",
-                    Type: "Audio",
-                    VideoCodec: nil,
-                    AudioCodec: nil
+                    container: "mp3,flac,aac,m4a,alac,wav,ogg,opus",
+                    type: "Audio",
+                    videoCodec: nil,
+                    audioCodec: nil
                 ),
             ],
             TranscodingProfiles: [
                 EmbyTranscodingProfile(
-                    Container: "ts",
-                    Type: "Video",
-                    VideoCodec: "h264",
-                    AudioCodec: "aac",
-                    Protocol: "hls",
-                    Context: "Streaming",
-                    EstimateContentLength: false,
-                    MinSegments: 1,
-                    SegmentLength: 3
+                    container: "ts",
+                    type: "Video",
+                    videoCodec: "h264",
+                    audioCodec: "aac",
+                    protocolName: "hls",
+                    context: "Streaming",
+                    estimateContentLength: false,
+                    minSegments: 1,
+                    segmentLength: 3
                 ),
             ],
             SubtitleProfiles: [
-                EmbySubtitleProfile(Format: "srt", Method: "External"),
-                EmbySubtitleProfile(Format: "vtt", Method: "External"),
-                EmbySubtitleProfile(Format: "subrip", Method: "External"),
+                EmbySubtitleProfile(format: "srt", method: "External"),
+                EmbySubtitleProfile(format: "vtt", method: "External"),
+                EmbySubtitleProfile(format: "subrip", method: "External"),
             ]
         )
     }
