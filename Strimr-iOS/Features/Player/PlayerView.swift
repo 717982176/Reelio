@@ -35,6 +35,7 @@ struct PlayerView: View {
     @State private var subtitleSearchErrorMessage = ""
     @State private var showingSubtitleSearchError = false
     @State private var isRotationLocked = false
+    @State private var hasAppliedInitialOrientation = false
     @State private var isShowingSharePlayExitPrompt = false
     @State private var activePlaybackURL: URL?
     @State private var needsPlaybackReloadAfterBackground = false
@@ -82,6 +83,10 @@ struct PlayerView: View {
         let lifecycle = AnyView(
             base
                 .onAppear {
+                    if !hasAppliedInitialOrientation {
+                        hasAppliedInitialOrientation = true
+                        AppDelegate.requestInterfaceOrientation(.landscape)
+                    }
                     playerController.onMediaLoaded = handleMediaLoaded
                     playerController.onPlaybackEnded = handlePlaybackEnded
                     playerController.onPictureInPictureStartFailed = {

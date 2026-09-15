@@ -14,6 +14,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         }
     }
 
+    static func requestInterfaceOrientation(_ orientations: UIInterfaceOrientationMask) {
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: orientations))
+        }
+    }
+
     static func lockToCurrentOrientation() {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else {
             orientationLock = .all
