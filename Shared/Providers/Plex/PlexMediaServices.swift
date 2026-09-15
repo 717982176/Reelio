@@ -166,6 +166,9 @@ final class PlexMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
         guard let item = response.mediaContainer.metadata?.first,
               let path = item.art ?? item.thumb
         else { return nil }
+        if let services {
+            return try await services.artwork.artwork(path: path, width: 800, height: 450)
+        }
         return try await artwork(path: path, width: 800, height: 450)
     }
 
@@ -941,6 +944,11 @@ enum PlexMediaServicesFactory {
             scope: .plex(serverID: identity.id, profileID: profileID),
         )
         let liveTV = PlexLiveTVService(context: context)
+        let userIdentifier = sessionManager?.user?.uuid
+            ?? sessionManager?.user?.id.map(String.init)
+            ?? sessionManager?.user?.username
+        let scope = userIdentifier.flatMap { CacheScope(provider: .plex, serverID: identity.id, userID: $0) }
+        let cachedArtwork = CachedMediaArtworkService(underlying: adapter, scope: scope)
         let services = MediaServices(
             provider: .plex,
             identity: identity,
@@ -948,7 +956,7 @@ enum PlexMediaServicesFactory {
             home: adapter,
             library: adapter,
             search: adapter,
-            artwork: adapter,
+            artwork: cachedArtwork,
             detail: adapter,
             favorites: favorites,
             playback: adapter,

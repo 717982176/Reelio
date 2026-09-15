@@ -186,6 +186,9 @@ final class JellyfinMediaServiceAdapter: MediaHomeService, MediaLibraryService, 
         case .collection, .playlist: .thumb
         default: .art
         }
+        if let services {
+            return try await services.artwork.artwork(for: media, kind: artworkKind, width: 800, height: 450)
+        }
         return try await artwork(for: media, kind: artworkKind, width: 800, height: 450)
     }
 
@@ -1126,6 +1129,8 @@ enum JellyfinMediaServicesFactory {
             server: connection.serverIdentity,
         )
         let liveTV = JellyfinLiveTVService(context: context, server: connection.serverIdentity)
+        let scope = CacheScope(provider: .jellyfin, serverID: connection.serverID, userID: connection.userID)
+        let cachedArtwork = CachedMediaArtworkService(underlying: adapter, scope: scope)
         let services = MediaServices(
             provider: .jellyfin,
             identity: connection.serverIdentity,
@@ -1133,7 +1138,7 @@ enum JellyfinMediaServicesFactory {
             home: adapter,
             library: adapter,
             search: adapter,
-            artwork: adapter,
+            artwork: cachedArtwork,
             detail: adapter,
             favorites: favorites,
             playback: adapter,

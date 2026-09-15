@@ -226,6 +226,9 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
         case .series, .movie: .art
         default: .thumb
         }
+        if let services {
+            return try await services.artwork.artwork(for: media, kind: artworkKind, width: 600, height: 400)
+        }
         return try await artwork(for: media, kind: artworkKind, width: 600, height: 400)
     }
 
@@ -637,6 +640,8 @@ enum EmbyMediaServicesFactory {
         let adapter = EmbyMediaServiceAdapter(context: context, server: connection.serverIdentity)
         let favorites = EmbyFavoritesService(context: context, server: connection.serverIdentity)
         let playback = EmbyPlaybackService(context: context, server: connection.serverIdentity)
+        let scope = CacheScope(provider: .emby, serverID: connection.serverID, userID: connection.userID)
+        let cachedArtwork = CachedMediaArtworkService(underlying: adapter, scope: scope)
         let services = MediaServices(
             provider: .emby,
             identity: connection.serverIdentity,
@@ -644,7 +649,7 @@ enum EmbyMediaServicesFactory {
             home: adapter,
             library: adapter,
             search: adapter,
-            artwork: adapter,
+            artwork: cachedArtwork,
             detail: adapter,
             favorites: favorites,
             playback: playback,
