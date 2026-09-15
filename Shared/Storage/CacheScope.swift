@@ -75,7 +75,7 @@ struct CacheEntryMetadata: Codable, Sendable, Hashable {
         expiresAt: Date,
         lastAccessedAt: Date = Date(),
         schemaVersion: Int = 1,
-        byteCount: Int64
+        byteCount: Int64,
     ) {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -88,11 +88,11 @@ struct CacheEntryMetadata: Codable, Sendable, Hashable {
 
     func freshness(at now: Date = Date()) -> CacheFreshness {
         if now < freshUntil {
-            return .fresh
+            .fresh
         } else if now < expiresAt {
-            return .stale
+            .stale
         } else {
-            return .expired
+            .expired
         }
     }
 }
@@ -101,10 +101,4 @@ struct CacheRecord: Sendable {
     let data: Data
     let freshness: CacheFreshness
     let metadata: CacheEntryMetadata
-
-    init(data: Data, freshness: CacheFreshness, metadata: CacheEntryMetadata) {
-        self.data = data
-        self.freshness = freshness
-        self.metadata = metadata
-    }
 }

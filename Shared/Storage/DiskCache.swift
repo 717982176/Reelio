@@ -8,7 +8,7 @@ actor DiskCache {
 
         init(
             baseDirectoryURL: URL? = nil,
-            maxBytes: Int64 = 50 * 1024 * 1024
+            maxBytes: Int64 = 50 * 1024 * 1024,
         ) {
             self.baseDirectoryURL = baseDirectoryURL
                 ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -64,7 +64,7 @@ actor DiskCache {
         return CacheRecord(
             data: unpacked.payload,
             freshness: freshness,
-            metadata: unpacked.metadata
+            metadata: unpacked.metadata,
         )
     }
 
@@ -74,7 +74,7 @@ actor DiskCache {
         scope: CacheScope,
         policy: CachePolicy,
         schemaVersion: Int = 1,
-        now: Date = Date()
+        now: Date = Date(),
     ) throws {
         let scopeDir = scopeDirectoryURL(for: scope)
         try ensureDirectory(scopeDir)
@@ -88,7 +88,7 @@ actor DiskCache {
             expiresAt: expiresAt,
             lastAccessedAt: now,
             schemaVersion: schemaVersion,
-            byteCount: Int64(data.count)
+            byteCount: Int64(data.count),
         )
 
         let envelopeData = try Self.makeEnvelope(metadata: metadata, payload: data)
@@ -110,7 +110,7 @@ actor DiskCache {
                 destinationURL,
                 withItemAt: tempURL,
                 backupItemName: nil,
-                options: []
+                options: [],
             )
         } else {
             try fileManager.moveItem(at: tempURL, to: destinationURL)
@@ -207,7 +207,7 @@ actor DiskCache {
         guard let enumerator = fileManager.enumerator(
             at: configuration.baseDirectoryURL,
             includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
+            options: [.skipsHiddenFiles],
         ) else {
             return
         }
@@ -248,8 +248,8 @@ actor DiskCache {
                     fileURL: fileURL,
                     byteSize: fileSize,
                     expiresAt: metadata.expiresAt,
-                    accessedAt: effectiveAccess
-                )
+                    accessedAt: effectiveAccess,
+                ),
             )
             totalBytes += fileSize
         }
@@ -279,7 +279,7 @@ actor DiskCache {
               let enumerator = fileManager.enumerator(
                   at: configuration.baseDirectoryURL,
                   includingPropertiesForKeys: nil,
-                  options: [.skipsHiddenFiles]
+                  options: [.skipsHiddenFiles],
               )
         else {
             return 0
@@ -297,7 +297,7 @@ actor DiskCache {
               let enumerator = fileManager.enumerator(
                   at: configuration.baseDirectoryURL,
                   includingPropertiesForKeys: [.fileSizeKey],
-                  options: [.skipsHiddenFiles]
+                  options: [.skipsHiddenFiles],
               )
         else {
             return 0
@@ -396,215 +396,246 @@ actor DiskCache {
 }
 
 #if DEBUG
-extension DiskCache {
-    static func runSelfTest() async throws -> Bool {
-        let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ReelioDiskCacheTests_\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: tempDir) }
+    extension DiskCache {
+        static func runSelfTest() async throws -> Bool {
+            let tempDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ReelioDiskCacheTests_\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let cache = DiskCache(configuration: Configuration(baseDirectoryURL: tempDir, maxBytes: 5000))
+            let cache = DiskCache(configuration: Configuration(baseDirectoryURL: tempDir, maxBytes: 5000))
 
-        // 1. Different provider scope isolation
-        guard let scopePlex = CacheScope(provider: .plex, serverID: "srv1", userID: "u1"),
-              let scopeJellyfin = CacheScope(provider: .jellyfin, serverID: "srv1", userID: "u1")
-        else {
-            throw TestError("Failed to build scopes")
+            // 1. Different provider scope isolation
+            guard let scopePlex = CacheScope(provider: .plex, serverID: "srv1", userID: "u1"),
+                  let scopeJellyfin = CacheScope(provider: .jellyfin, serverID: "srv1", userID: "u1")
+            else {
+                throw TestError("Failed to build scopes")
+            }
+            let testKey = "test_key_1"
+            let dataPlex = Data("plex_data".utf8)
+            let dataJellyfin = Data("jellyfin_data".utf8)
+            let standardPolicy = CachePolicy(freshFor: 60, expiresAfter: 300)
+
+            try await cache.store(dataPlex, for: testKey, scope: scopePlex, policy: standardPolicy)
+            try await cache.store(dataJellyfin, for: testKey, scope: scopeJellyfin, policy: standardPolicy)
+
+            guard await cache.data(for: testKey, scope: scopePlex)?.data == dataPlex,
+                  await cache.data(for: testKey, scope: scopeJellyfin)?.data == dataJellyfin
+            else {
+                throw TestError("Provider scope collision")
+            }
+
+            // 2. Same provider, different server isolation
+            guard let scopeServer2 = CacheScope(provider: .plex, serverID: "srv2", userID: "u1") else {
+                throw TestError("Failed to build server scope")
+            }
+            let dataServer2 = Data("server2_data".utf8)
+            try await cache.store(dataServer2, for: testKey, scope: scopeServer2, policy: standardPolicy)
+            guard await cache.data(for: testKey, scope: scopePlex)?.data == dataPlex,
+                  await cache.data(for: testKey, scope: scopeServer2)?.data == dataServer2
+            else {
+                throw TestError("Server scope collision")
+            }
+
+            // 3. Same server, different user isolation
+            guard let scopeUser2 = CacheScope(provider: .plex, serverID: "srv1", userID: "u2") else {
+                throw TestError("Failed to build user scope")
+            }
+            let dataUser2 = Data("user2_data".utf8)
+            try await cache.store(dataUser2, for: testKey, scope: scopeUser2, policy: standardPolicy)
+            guard await cache.data(for: testKey, scope: scopePlex)?.data == dataPlex,
+                  await cache.data(for: testKey, scope: scopeUser2)?.data == dataUser2
+            else {
+                throw TestError("User scope collision")
+            }
+
+            // 4. Scope delimiter collision test
+            guard let scopeA = CacheScope(provider: .plex, serverID: "a|b", userID: "c"),
+                  let scopeB = CacheScope(provider: .plex, serverID: "a", userID: "b|c")
+            else {
+                throw TestError("Failed to build collision test scopes")
+            }
+            guard scopeA.canonicalKey != scopeB.canonicalKey,
+                  scopeA.relativeDirectoryPath != scopeB.relativeDirectoryPath
+            else {
+                throw TestError("Scope collision detected between ambiguous tuples")
+            }
+
+            // 5. Opaque identifier whitespace preservation test
+            guard let scopeNorm = CacheScope(provider: .plex, serverID: "server", userID: "user"),
+                  let scopeSpaced = CacheScope(provider: .plex, serverID: " server ", userID: "user")
+            else {
+                throw TestError("Failed to build whitespace test scopes")
+            }
+            guard scopeNorm.canonicalKey != scopeSpaced.canonicalKey,
+                  scopeNorm.relativeDirectoryPath != scopeSpaced.relativeDirectoryPath
+            else {
+                throw TestError("Whitespace variation in opaque ID caused collision")
+            }
+            guard CacheScope(provider: .plex, serverID: "   ", userID: "user") == nil else {
+                throw TestError("Pure whitespace serverID was not rejected")
+            }
+
+            // 6, 7, 8. Freshness determination
+            let now = Date()
+            let freshRecord = await cache.data(for: testKey, scope: scopePlex, now: now)
+            guard freshRecord?.freshness == .fresh else {
+                throw TestError("Freshness should be .fresh")
+            }
+
+            let staleTime = now.addingTimeInterval(100) // between freshFor (60) and expiresAfter (300)
+            let staleRecord = await cache.data(for: testKey, scope: scopePlex, now: staleTime)
+            guard staleRecord?.freshness == .stale else {
+                throw TestError("Freshness should be .stale")
+            }
+
+            let expiredTime = now.addingTimeInterval(400) // after expiresAfter (300)
+            let expiredRecord = await cache.data(for: testKey, scope: scopePlex, now: expiredTime)
+            guard expiredRecord?.freshness == .expired else {
+                throw TestError("Freshness should be .expired")
+            }
+
+            // 8. Store -> read data round-trip consistency (large payload)
+            var payloadBytes = [UInt8](repeating: 0, count: 1500)
+            for i in 0 ..< payloadBytes.count {
+                payloadBytes[i] = UInt8(i % 256)
+            }
+            let payloadData = Data(payloadBytes)
+            let payloadKey = "binary_payload_key"
+            try await cache.store(payloadData, for: payloadKey, scope: scopePlex, policy: standardPolicy)
+            guard let readPayload = await cache.data(for: payloadKey, scope: scopePlex),
+                  readPayload.data == payloadData,
+                  readPayload.metadata.byteCount == Int64(payloadData.count)
+            else {
+                throw TestError("Data round-trip mismatch")
+            }
+
+            // 9. Remove single entry
+            await cache.remove(for: payloadKey, scope: scopePlex)
+            guard await cache.data(for: payloadKey, scope: scopePlex) == nil else {
+                throw TestError("Remove entry failed")
+            }
+
+            // 10. Remove entire scope
+            await cache.removeScope(scopeUser2)
+            guard await cache.data(for: testKey, scope: scopeUser2) == nil else {
+                throw TestError("Remove scope failed")
+            }
+            guard await cache.data(for: testKey, scope: scopePlex)?.data == dataPlex else {
+                throw TestError("Remove scope leaked to other scopes")
+            }
+
+            // 11 & 12. Prune over capacity & expired prioritization
+            let pruneScope = scopePlex
+            let expiredPolicy = CachePolicy(freshFor: 1, expiresAfter: 2)
+            let activePolicy = CachePolicy(freshFor: 500, expiresAfter: 1000)
+
+            let expData = Data(repeating: 0xEE, count: 1200)
+            try await cache.store(expData, for: "exp_1", scope: pruneScope, policy: expiredPolicy, now: now)
+
+            let act1 = Data(repeating: 0x11, count: 1200)
+            let act2 = Data(repeating: 0x22, count: 1200)
+            let act3 = Data(repeating: 0x33, count: 1200)
+            let act4 = Data(repeating: 0x44, count: 1200)
+
+            try await cache.store(act1, for: "act_1", scope: pruneScope, policy: activePolicy, now: now)
+            try await cache.store(
+                act2,
+                for: "act_2",
+                scope: pruneScope,
+                policy: activePolicy,
+                now: now.addingTimeInterval(1),
+            )
+            try await cache.store(
+                act3,
+                for: "act_3",
+                scope: pruneScope,
+                policy: activePolicy,
+                now: now.addingTimeInterval(2),
+            )
+            try await cache.store(
+                act4,
+                for: "act_4",
+                scope: pruneScope,
+                policy: activePolicy,
+                now: now.addingTimeInterval(3),
+            )
+
+            try await cache.prune(now: now.addingTimeInterval(5))
+
+            let expLookup = await cache.data(for: "exp_1", scope: pruneScope, now: now.addingTimeInterval(5))
+            guard expLookup == nil else {
+                throw TestError("Expired entry was not pruned")
+            }
+
+            let total = await cache.totalByteCount()
+            guard total <= 5000 else {
+                throw TestError("Cache exceeded maxBytes after prune: \(total) > 5000")
+            }
+
+            guard await cache.data(for: "act_4", scope: pruneScope, now: now.addingTimeInterval(5)) != nil else {
+                throw TestError("Newest active entry should be preserved")
+            }
+
+            // 13. Unsafe path key hashing
+            let unsafeKey = "../../unsafe/path?query=value&name=test#fragment\\null\0"
+            let hashedKey = DiskCache.hashKey(unsafeKey)
+            guard !hashedKey.contains("/"),
+                  !hashedKey.contains(".."),
+                  hashedKey.count == 64
+            else {
+                throw TestError("Unsafe key was not properly hashed: \(hashedKey)")
+            }
+
+            // 14. Cumulative budget overshoot test without manual prune
+            let budgetDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ReelioCumulativeTests_\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: budgetDir) }
+
+            let budgetCache = DiskCache(configuration: Configuration(baseDirectoryURL: budgetDir, maxBytes: 5000))
+            guard let budgetScope = CacheScope(provider: .plex, serverID: "srvBudget", userID: "uBudget") else {
+                throw TestError("Failed to build budget scope")
+            }
+            let budgetPolicy = CachePolicy(freshFor: 1000, expiresAfter: 2000)
+
+            // 8 items of 800 bytes each. Each file on disk is ~950B (< max(1024, 1250)).
+            // Total attempted writes: 8 * 950 ≈ 7600B > 5000B budget.
+            // All written without manual prune() call, count < 50, elapsed time = 0s.
+            for i in 0 ..< 8 {
+                let itemData = Data(repeating: UInt8(i + 1), count: 800)
+                try await budgetCache.store(
+                    itemData,
+                    for: "budget_\(i)",
+                    scope: budgetScope,
+                    policy: budgetPolicy,
+                    now: now,
+                )
+            }
+
+            let budgetTotal = await budgetCache.totalByteCount()
+            guard budgetTotal <= 5000 else {
+                throw TestError("Cumulative store overshot maxBytes: \(budgetTotal) > 5000")
+            }
+
+            // 15. removeAll cleans up directory and resets counters
+            await budgetCache.removeAll()
+            let postRemoveAllCount = await budgetCache.entryCount()
+            let postRemoveAllBytes = await budgetCache.totalByteCount()
+            guard postRemoveAllCount == 0, postRemoveAllBytes == 0 else {
+                throw TestError("removeAll failed to reset entryCount and totalByteCount to 0")
+            }
+
+            return true
         }
-        let testKey = "test_key_1"
-        let dataPlex = Data("plex_data".utf8)
-        let dataJellyfin = Data("jellyfin_data".utf8)
-        let standardPolicy = CachePolicy(freshFor: 60, expiresAfter: 300)
 
-        try await cache.store(dataPlex, for: testKey, scope: scopePlex, policy: standardPolicy)
-        try await cache.store(dataJellyfin, for: testKey, scope: scopeJellyfin, policy: standardPolicy)
+        private struct TestError: LocalizedError {
+            let message: String
+            init(_ message: String) {
+                self.message = message
+            }
 
-        guard await cache.data(for: testKey, scope: scopePlex)?.data == dataPlex,
-              await cache.data(for: testKey, scope: scopeJellyfin)?.data == dataJellyfin
-        else {
-            throw TestError("Provider scope collision")
+            var errorDescription: String? {
+                message
+            }
         }
-
-        // 2. Same provider, different server isolation
-        guard let scopeServer2 = CacheScope(provider: .plex, serverID: "srv2", userID: "u1") else {
-            throw TestError("Failed to build server scope")
-        }
-        let dataServer2 = Data("server2_data".utf8)
-        try await cache.store(dataServer2, for: testKey, scope: scopeServer2, policy: standardPolicy)
-        guard await cache.data(for: testKey, scope: scopePlex)?.data == dataPlex,
-              await cache.data(for: testKey, scope: scopeServer2)?.data == dataServer2
-        else {
-            throw TestError("Server scope collision")
-        }
-
-        // 3. Same server, different user isolation
-        guard let scopeUser2 = CacheScope(provider: .plex, serverID: "srv1", userID: "u2") else {
-            throw TestError("Failed to build user scope")
-        }
-        let dataUser2 = Data("user2_data".utf8)
-        try await cache.store(dataUser2, for: testKey, scope: scopeUser2, policy: standardPolicy)
-        guard await cache.data(for: testKey, scope: scopePlex)?.data == dataPlex,
-              await cache.data(for: testKey, scope: scopeUser2)?.data == dataUser2
-        else {
-            throw TestError("User scope collision")
-        }
-
-        // 4. Scope delimiter collision test
-        guard let scopeA = CacheScope(provider: .plex, serverID: "a|b", userID: "c"),
-              let scopeB = CacheScope(provider: .plex, serverID: "a", userID: "b|c")
-        else {
-            throw TestError("Failed to build collision test scopes")
-        }
-        guard scopeA.canonicalKey != scopeB.canonicalKey,
-              scopeA.relativeDirectoryPath != scopeB.relativeDirectoryPath
-        else {
-            throw TestError("Scope collision detected between ambiguous tuples")
-        }
-
-        // 5. Opaque identifier whitespace preservation test
-        guard let scopeNorm = CacheScope(provider: .plex, serverID: "server", userID: "user"),
-              let scopeSpaced = CacheScope(provider: .plex, serverID: " server ", userID: "user")
-        else {
-            throw TestError("Failed to build whitespace test scopes")
-        }
-        guard scopeNorm.canonicalKey != scopeSpaced.canonicalKey,
-              scopeNorm.relativeDirectoryPath != scopeSpaced.relativeDirectoryPath
-        else {
-            throw TestError("Whitespace variation in opaque ID caused collision")
-        }
-        guard CacheScope(provider: .plex, serverID: "   ", userID: "user") == nil else {
-            throw TestError("Pure whitespace serverID was not rejected")
-        }
-
-        // 6, 7, 8. Freshness determination
-        let now = Date()
-        let freshRecord = await cache.data(for: testKey, scope: scopePlex, now: now)
-        guard freshRecord?.freshness == .fresh else {
-            throw TestError("Freshness should be .fresh")
-        }
-
-        let staleTime = now.addingTimeInterval(100) // between freshFor (60) and expiresAfter (300)
-        let staleRecord = await cache.data(for: testKey, scope: scopePlex, now: staleTime)
-        guard staleRecord?.freshness == .stale else {
-            throw TestError("Freshness should be .stale")
-        }
-
-        let expiredTime = now.addingTimeInterval(400) // after expiresAfter (300)
-        let expiredRecord = await cache.data(for: testKey, scope: scopePlex, now: expiredTime)
-        guard expiredRecord?.freshness == .expired else {
-            throw TestError("Freshness should be .expired")
-        }
-
-        // 8. Store -> read data round-trip consistency (large payload)
-        var payloadBytes = [UInt8](repeating: 0, count: 1500)
-        for i in 0 ..< payloadBytes.count { payloadBytes[i] = UInt8(i % 256) }
-        let payloadData = Data(payloadBytes)
-        let payloadKey = "binary_payload_key"
-        try await cache.store(payloadData, for: payloadKey, scope: scopePlex, policy: standardPolicy)
-        guard let readPayload = await cache.data(for: payloadKey, scope: scopePlex),
-              readPayload.data == payloadData,
-              readPayload.metadata.byteCount == Int64(payloadData.count)
-        else {
-            throw TestError("Data round-trip mismatch")
-        }
-
-        // 9. Remove single entry
-        await cache.remove(for: payloadKey, scope: scopePlex)
-        guard await cache.data(for: payloadKey, scope: scopePlex) == nil else {
-            throw TestError("Remove entry failed")
-        }
-
-        // 10. Remove entire scope
-        await cache.removeScope(scopeUser2)
-        guard await cache.data(for: testKey, scope: scopeUser2) == nil else {
-            throw TestError("Remove scope failed")
-        }
-        guard await cache.data(for: testKey, scope: scopePlex)?.data == dataPlex else {
-            throw TestError("Remove scope leaked to other scopes")
-        }
-
-        // 11 & 12. Prune over capacity & expired prioritization
-        let pruneScope = scopePlex
-        let expiredPolicy = CachePolicy(freshFor: 1, expiresAfter: 2)
-        let activePolicy = CachePolicy(freshFor: 500, expiresAfter: 1000)
-
-        let expData = Data(repeating: 0xEE, count: 1200)
-        try await cache.store(expData, for: "exp_1", scope: pruneScope, policy: expiredPolicy, now: now)
-
-        let act1 = Data(repeating: 0x11, count: 1200)
-        let act2 = Data(repeating: 0x22, count: 1200)
-        let act3 = Data(repeating: 0x33, count: 1200)
-        let act4 = Data(repeating: 0x44, count: 1200)
-
-        try await cache.store(act1, for: "act_1", scope: pruneScope, policy: activePolicy, now: now)
-        try await cache.store(act2, for: "act_2", scope: pruneScope, policy: activePolicy, now: now.addingTimeInterval(1))
-        try await cache.store(act3, for: "act_3", scope: pruneScope, policy: activePolicy, now: now.addingTimeInterval(2))
-        try await cache.store(act4, for: "act_4", scope: pruneScope, policy: activePolicy, now: now.addingTimeInterval(3))
-
-        try await cache.prune(now: now.addingTimeInterval(5))
-
-        let expLookup = await cache.data(for: "exp_1", scope: pruneScope, now: now.addingTimeInterval(5))
-        guard expLookup == nil else {
-            throw TestError("Expired entry was not pruned")
-        }
-
-        let total = await cache.totalByteCount()
-        guard total <= 5000 else {
-            throw TestError("Cache exceeded maxBytes after prune: \(total) > 5000")
-        }
-
-        guard await cache.data(for: "act_4", scope: pruneScope, now: now.addingTimeInterval(5)) != nil else {
-            throw TestError("Newest active entry should be preserved")
-        }
-
-        // 13. Unsafe path key hashing
-        let unsafeKey = "../../unsafe/path?query=value&name=test#fragment\\null\0"
-        let hashedKey = DiskCache.hashKey(unsafeKey)
-        guard !hashedKey.contains("/"),
-              !hashedKey.contains(".."),
-              hashedKey.count == 64
-        else {
-            throw TestError("Unsafe key was not properly hashed: \(hashedKey)")
-        }
-
-        // 14. Cumulative budget overshoot test without manual prune
-        let budgetDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ReelioCumulativeTests_\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: budgetDir) }
-
-        let budgetCache = DiskCache(configuration: Configuration(baseDirectoryURL: budgetDir, maxBytes: 5000))
-        guard let budgetScope = CacheScope(provider: .plex, serverID: "srvBudget", userID: "uBudget") else {
-            throw TestError("Failed to build budget scope")
-        }
-        let budgetPolicy = CachePolicy(freshFor: 1000, expiresAfter: 2000)
-
-        // 8 items of 800 bytes each. Each file on disk is ~950B (< max(1024, 1250)).
-        // Total attempted writes: 8 * 950 ≈ 7600B > 5000B budget.
-        // All written without manual prune() call, count < 50, elapsed time = 0s.
-        for i in 0 ..< 8 {
-            let itemData = Data(repeating: UInt8(i + 1), count: 800)
-            try await budgetCache.store(itemData, for: "budget_\(i)", scope: budgetScope, policy: budgetPolicy, now: now)
-        }
-
-        let budgetTotal = await budgetCache.totalByteCount()
-        guard budgetTotal <= 5000 else {
-            throw TestError("Cumulative store overshot maxBytes: \(budgetTotal) > 5000")
-        }
-
-        // 15. removeAll cleans up directory and resets counters
-        await budgetCache.removeAll()
-        let postRemoveAllCount = await budgetCache.entryCount()
-        let postRemoveAllBytes = await budgetCache.totalByteCount()
-        guard postRemoveAllCount == 0, postRemoveAllBytes == 0 else {
-            throw TestError("removeAll failed to reset entryCount and totalByteCount to 0")
-        }
-
-        return true
     }
-
-    private struct TestError: LocalizedError {
-        let message: String
-        init(_ message: String) { self.message = message }
-        var errorDescription: String? { message }
-    }
-}
 #endif
