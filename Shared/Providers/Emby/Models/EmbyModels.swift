@@ -65,6 +65,23 @@ nonisolated struct EmbyStudio: Decodable, Hashable, Sendable {
         case id = "Id"
         case name = "Name"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let stringID = try? container.decodeIfPresent(String.self, forKey: .id) {
+            id = stringID
+        } else if let intID = try? container.decodeIfPresent(Int64.self, forKey: .id) {
+            id = String(intID)
+        } else {
+            id = nil
+        }
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+    }
+
+    init(id: String? = nil, name: String? = nil) {
+        self.id = id
+        self.name = name
+    }
 }
 
 nonisolated struct EmbyUserData: Decodable, Hashable, Sendable {
@@ -122,6 +139,52 @@ nonisolated struct EmbyPersonInfo: Decodable, Hashable, Sendable {
     }
 }
 
+nonisolated struct EmbyProviderIDs: Decodable, Hashable, Sendable {
+    let values: [String: String]
+
+    init(values: [String: String] = [:]) {
+        self.values = values
+    }
+
+    init(from decoder: Decoder) throws {
+        guard let container = try? decoder.container(keyedBy: DynamicCodingKey.self) else {
+            values = [:]
+            return
+        }
+
+        var result: [String: String] = [:]
+        for key in container.allKeys {
+            if let stringValue = try? container.decode(String.self, forKey: key) {
+                result[key.stringValue] = stringValue
+            } else if let intValue = try? container.decode(Int64.self, forKey: key) {
+                result[key.stringValue] = String(intValue)
+            } else if let doubleValue = try? container.decode(Double.self, forKey: key), doubleValue.isFinite {
+                if let integerValue = Int64(exactly: doubleValue) {
+                    result[key.stringValue] = String(integerValue)
+                } else {
+                    result[key.stringValue] = String(doubleValue)
+                }
+            }
+        }
+        values = result
+    }
+
+    private struct DynamicCodingKey: CodingKey, Sendable {
+        var stringValue: String
+        var intValue: Int?
+
+        init?(stringValue: String) {
+            self.stringValue = stringValue
+            intValue = nil
+        }
+
+        init?(intValue: Int) {
+            stringValue = String(intValue)
+            self.intValue = intValue
+        }
+    }
+}
+
 nonisolated struct EmbyItem: Decodable, Identifiable, Hashable, Sendable {
     let id: String
     let name: String?
@@ -148,7 +211,7 @@ nonisolated struct EmbyItem: Decodable, Identifiable, Hashable, Sendable {
     let backdropImageTags: [String]?
     let seriesPrimaryImageTag: String?
     let people: [EmbyPersonInfo]?
-    let providerIDs: [String: String]?
+    let providerIDsWrapper: EmbyProviderIDs?
     let premiereDate: String?
     let dateCreated: String?
     let primaryImageAspectRatio: Double?
@@ -182,13 +245,17 @@ nonisolated struct EmbyItem: Decodable, Identifiable, Hashable, Sendable {
         case backdropImageTags = "BackdropImageTags"
         case seriesPrimaryImageTag = "SeriesPrimaryImageTag"
         case people = "People"
-        case providerIDs = "ProviderIds"
+        case providerIDsWrapper = "ProviderIds"
         case premiereDate = "PremiereDate"
         case dateCreated = "DateCreated"
         case primaryImageAspectRatio = "PrimaryImageAspectRatio"
         case parentBackdropItemID = "ParentBackdropItemId"
         case parentBackdropImageTags = "ParentBackdropImageTags"
         case userData = "UserData"
+    }
+
+    var providerIDs: [String: String]? {
+        providerIDsWrapper?.values
     }
 
     var kind: EmbyItemKind {
