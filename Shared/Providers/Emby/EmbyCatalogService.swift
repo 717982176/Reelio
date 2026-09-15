@@ -279,12 +279,24 @@ struct EmbyCatalogService {
         let userID = try currentUserID
 
         var types: [String] = []
-        if kinds.contains(.movie) { types.append("Movie") }
-        if kinds.contains(.series) { types.append("Series") }
-        if kinds.contains(.season) { types.append("Season") }
-        if kinds.contains(.episode) { types.append("Episode") }
-        if kinds.contains(.collection) { types.append("BoxSet") }
-        if kinds.contains(.playlist) { types.append("Playlist") }
+        if kinds.contains(.movie) {
+            types.append("Movie")
+        }
+        if kinds.contains(.series) {
+            types.append("Series")
+        }
+        if kinds.contains(.season) {
+            types.append("Season")
+        }
+        if kinds.contains(.episode) {
+            types.append("Episode")
+        }
+        if kinds.contains(.collection) {
+            types.append("BoxSet")
+        }
+        if kinds.contains(.playlist) {
+            types.append("Playlist")
+        }
         if types.isEmpty {
             types = ["Movie", "Series", "Episode"]
         }

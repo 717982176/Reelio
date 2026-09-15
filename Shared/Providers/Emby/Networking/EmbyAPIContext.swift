@@ -295,7 +295,7 @@ final class EmbyAPIContext {
             throw EmbyAPIError.authenticationRequired
         }
         var headers = authorizationHeaders(token: token, userID: connection?.userID)
-        let sensitiveKeys: Set<String> = [
+        let sensitiveKeys: Set = [
             "host",
             "authorization",
             "x-emby-token",
@@ -375,7 +375,7 @@ final class EmbyAPIContext {
             query: [
                 URLQueryItem(name: "DeviceId", value: deviceID),
                 URLQueryItem(name: "PlaySessionId", value: playSessionID),
-            ]
+            ],
         )
     }
 
@@ -610,6 +610,7 @@ final class EmbyAPIContext {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
     }
+
     nonisolated static func hasSameOrigin(_ lhs: URL?, _ rhs: URL?) -> Bool {
         guard let lhs, let rhs,
               let left = URLComponents(url: lhs, resolvingAgainstBaseURL: false),

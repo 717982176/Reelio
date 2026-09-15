@@ -101,7 +101,7 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
                         size: displayItems.count,
                         more: false,
                         items: displayItems,
-                    )
+                    ),
                 )
             }
         } catch {
@@ -124,7 +124,7 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
                             size: displayItems.count,
                             more: false,
                             items: displayItems,
-                        )
+                        ),
                     )
                 }
             } catch {
@@ -206,10 +206,9 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
         default: "Movie"
         }
 
-        let item: EmbyItem?
-        switch library.type {
+        let item: EmbyItem? = switch library.type {
         case .collection, .playlist:
-            item = try await catalog.items(
+            try await catalog.items(
                 parentID: library.id,
                 includeTypes: type,
                 recursive: true,
@@ -217,7 +216,7 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
                 limit: 1,
             ).items.first
         default:
-            item = try await catalog.latest(types: type, parentID: library.id, limit: 1).first
+            try await catalog.latest(types: type, parentID: library.id, limit: 1).first
         }
 
         guard let item, let media = MediaDisplayItem(embyItem: item, server: server) else {
@@ -365,9 +364,17 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
 
     // MARK: - MediaDetailService
 
-    var supportsWatchlist: Bool { false }
-    var supportsRemoteSubtitleSearch: Bool { false }
-    var supportsAdvancedSubtitleSearch: Bool { false }
+    var supportsWatchlist: Bool {
+        false
+    }
+
+    var supportsRemoteSubtitleSearch: Bool {
+        false
+    }
+
+    var supportsAdvancedSubtitleSearch: Bool {
+        false
+    }
 
     func mediaItem(id: String) async throws -> MediaItem {
         let item = try await catalog.item(id: id)
@@ -375,7 +382,13 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
         return MediaItem(embyItem: item, server: server)
     }
 
-    func searchSubtitles(itemID _: String, language _: String, hearingImpaired _: Bool, forced _: Bool, title _: String?) async throws -> [RemoteSubtitleResult] {
+    func searchSubtitles(
+        itemID _: String,
+        language _: String,
+        hearingImpaired _: Bool,
+        forced _: Bool,
+        title _: String?,
+    ) async throws -> [RemoteSubtitleResult] {
         throw EmbyServiceError.unsupportedOperation
     }
 
@@ -457,11 +470,10 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
         let castPeople = actors.isEmpty ? people : actors
         let cast = castPeople.compactMap(CastMember.init)
 
-        let similarItems = (try? await catalog.similar(itemID: item.id, limit: 20)) ?? []
+        let similarItems = await (try? catalog.similar(itemID: item.id, limit: 20)) ?? []
         let similarDisplay = similarItems.compactMap { MediaDisplayItem(embyItem: $0, server: server) }
-        let relatedHubs: [Hub]
-        if !similarDisplay.isEmpty {
-            relatedHubs = [
+        let relatedHubs: [Hub] = if !similarDisplay.isEmpty {
+            [
                 Hub(
                     id: "emby.similar.\(item.id)",
                     key: "emby.similar.\(item.id)",
@@ -473,7 +485,7 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
                 ),
             ]
         } else {
-            relatedHubs = []
+            []
         }
 
         return MediaDetailContent(
@@ -554,8 +566,13 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
 
     // MARK: - MediaLiveTVService (Deferred)
 
-    var dvr: (any MediaDVRService)? { nil }
-    var supportsServerCaptureBuffer: Bool { false }
+    var dvr: (any MediaDVRService)? {
+        nil
+    }
+
+    var supportsServerCaptureBuffer: Bool {
+        false
+    }
 
     func isAvailable() async throws -> Bool {
         false
@@ -587,7 +604,11 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
 
     // MARK: - MediaDownloadService (Deferred)
 
-    func prepareDownload(itemID _: String, quality _: TranscodeQualityPreset, tracks _: MediaDownloadTrackPreference) async throws -> MediaDownloadPreparation {
+    func prepareDownload(
+        itemID _: String,
+        quality _: TranscodeQualityPreset,
+        tracks _: MediaDownloadTrackPreference,
+    ) async throws -> MediaDownloadPreparation {
         throw EmbyServiceError.unsupportedOperation
     }
 
@@ -595,7 +616,10 @@ final class EmbyMediaServiceAdapter: MediaHomeService, MediaLibraryService, Medi
         throw EmbyServiceError.unsupportedOperation
     }
 
-    func downloadSidecars(itemID _: String, tracks _: MediaDownloadTrackPreference) async throws -> [MediaDownloadSidecar] {
+    func downloadSidecars(
+        itemID _: String,
+        tracks _: MediaDownloadTrackPreference,
+    ) async throws -> [MediaDownloadSidecar] {
         throw EmbyServiceError.unsupportedOperation
     }
 

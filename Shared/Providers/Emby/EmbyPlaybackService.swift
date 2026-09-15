@@ -60,7 +60,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
 
     // MARK: - Queue
 
-    func queue(startingWith itemID: String, kind: MediaKind, shuffle: Bool) async throws -> PlaybackQueue {
+    func queue(startingWith itemID: String, kind _: MediaKind, shuffle: Bool) async throws -> PlaybackQueue {
         let item = try await catalog.item(id: itemID)
         return try await queue(startingWith: MediaItem(embyItem: item, server: server), shuffle: shuffle)
     }
@@ -73,14 +73,14 @@ final class EmbyPlaybackService: MediaPlaybackService {
             let resolvedEpisodes: [MediaItem]
             if let grandparentID = media.grandparentRatingKey, !grandparentID.isEmpty {
                 let seasonID = media.parentRatingKey
-                let episodeItems = (try? await catalog.episodes(seriesID: grandparentID, seasonID: seasonID)) ?? []
+                let episodeItems = await (try? catalog.episodes(seriesID: grandparentID, seasonID: seasonID)) ?? []
                 resolvedEpisodes = episodeItems.map { MediaItem(embyItem: $0, server: server) }
             } else if let parentID = media.parentRatingKey, !parentID.isEmpty {
                 if let seasonItem = try? await catalog.item(id: parentID),
                    let realSeriesID = seasonItem.seriesID,
                    !realSeriesID.isEmpty
                 {
-                    let episodeItems = (try? await catalog.episodes(seriesID: realSeriesID, seasonID: parentID)) ?? []
+                    let episodeItems = await (try? catalog.episodes(seriesID: realSeriesID, seasonID: parentID)) ?? []
                     resolvedEpisodes = episodeItems.map { MediaItem(embyItem: $0, server: server) }
                 } else {
                     resolvedEpisodes = []
@@ -92,7 +92,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
             queueMediaItems = resolvedEpisodes.isEmpty ? [media] : resolvedEpisodes
 
         case .collection:
-            let items = (try? await catalog.collectionItems(collectionID: media.id)) ?? []
+            let items = await (try? catalog.collectionItems(collectionID: media.id)) ?? []
             let playableItems = items.compactMap { MediaDisplayItem(embyItem: $0, server: server)?.playableItem }
             guard !playableItems.isEmpty else {
                 throw EmbyPlaybackError.noPlayableMediaSource
@@ -100,7 +100,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
             queueMediaItems = playableItems
 
         case .playlist:
-            let items = (try? await catalog.playlistItems(playlistID: media.id)) ?? []
+            let items = await (try? catalog.playlistItems(playlistID: media.id)) ?? []
             let playableItems = items.compactMap { MediaDisplayItem(embyItem: $0, server: server)?.playableItem }
             guard !playableItems.isEmpty else {
                 throw EmbyPlaybackError.noPlayableMediaSource
@@ -131,22 +131,21 @@ final class EmbyPlaybackService: MediaPlaybackService {
             PlaybackQueueItem(
                 id: UUID(),
                 media: $0,
-                providerQueueItemID: nil
+                providerQueueItemID: nil,
             )
         }
 
-        let currentIndex: Int
-        if media.type == .collection || media.type == .playlist {
-            currentIndex = 0
+        let currentIndex: Int = if media.type == .collection || media.type == .playlist {
+            0
         } else {
-            currentIndex = queueItems.firstIndex(where: { $0.media.id == media.id }) ?? 0
+            queueItems.firstIndex(where: { $0.media.id == media.id }) ?? 0
         }
 
         return PlaybackQueue(
             id: UUID(),
             items: queueItems,
             currentIndex: currentIndex,
-            isShuffled: shuffle
+            isShuffled: shuffle,
         )
     }
 
@@ -155,7 +154,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
     func prepare(
         media: MediaItem,
         resume: Bool,
-        quality: TranscodeQualityPreset
+        quality: TranscodeQualityPreset,
     ) async throws -> PlaybackPlan {
         guard let userID = context.connection?.userID else {
             throw EmbyAPIError.authenticationRequired
@@ -168,13 +167,13 @@ final class EmbyPlaybackService: MediaPlaybackService {
             userId: userID,
             startTimeTicks: startTimeTicks > 0 ? startTimeTicks : nil,
             maxStreamingBitrate: requestedBitrateCeiling,
-            deviceProfile: .reelio(maxBitrate: requestedBitrateCeiling)
+            deviceProfile: .reelio(maxBitrate: requestedBitrateCeiling),
         )
 
         let info: EmbyPlaybackInfoResponse = try await context.post(
             path: ["Items", media.id, "PlaybackInfo"],
             query: [URLQueryItem(name: "UserId", value: userID)],
-            body: body
+            body: body,
         )
 
         guard info.errorCode == nil,
@@ -189,7 +188,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
         let selection = try selectMediaSource(
             from: sources,
             quality: quality,
-            requestedCeiling: requestedBitrateCeiling
+            requestedCeiling: requestedBitrateCeiling,
         )
 
         let selectedSource = selection.source
@@ -209,13 +208,13 @@ final class EmbyPlaybackService: MediaPlaybackService {
             if let directStreamPath = selectedSource.directStreamURL, !directStreamPath.isEmpty {
                 streamURL = try context.resolveMediaURL(directStreamPath)
             } else {
-                let streamFile: String
-                if let rawContainer = selectedSource.container?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !rawContainer.isEmpty
+                let streamFile = if let rawContainer = selectedSource.container?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                    !rawContainer.isEmpty
                 {
-                    streamFile = "stream.\(rawContainer)"
+                    "stream.\(rawContainer)"
                 } else {
-                    streamFile = "stream"
+                    "stream"
                 }
 
                 streamURL = try context.url(
@@ -224,7 +223,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
                         URLQueryItem(name: "Static", value: "true"),
                         URLQueryItem(name: "MediaSourceId", value: selectedSource.id),
                         URLQueryItem(name: "PlaySessionId", value: playSessionID),
-                    ]
+                    ],
                 )
             }
         }
@@ -258,7 +257,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
             lastKnownPosition: initialPos,
             lastKnownPaused: false,
             hasReportedStarted: false,
-            hasReportedStopped: false
+            hasReportedStopped: false,
         )
 
         return PlaybackPlan(
@@ -279,7 +278,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
             externalSubtitles: externalSubs,
             chapters: [],
             skipSegments: [],
-            scrubThumbnailSource: nil
+            scrubThumbnailSource: nil,
         )
     }
 
@@ -305,7 +304,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
                 CanSeek: true,
                 PlayMethod: session.playMethod.rawValue,
                 AudioStreamIndex: session.audioStreamIndex,
-                SubtitleStreamIndex: session.subtitleStreamIndex
+                SubtitleStreamIndex: session.subtitleStreamIndex,
             )
 
             do {
@@ -354,7 +353,12 @@ final class EmbyPlaybackService: MediaPlaybackService {
 
     func reportProgress(plan: PlaybackPlan, position: TimeInterval, isPaused: Bool) async throws {
         guard let playSessionID = plan.playSessionID else {
-            try await sendPlaybackReport(path: ["Sessions", "Playing", "Progress"], plan: plan, position: position, isPaused: isPaused)
+            try await sendPlaybackReport(
+                path: ["Sessions", "Playing", "Progress"],
+                plan: plan,
+                position: position,
+                isPaused: isPaused,
+            )
             return
         }
 
@@ -369,7 +373,12 @@ final class EmbyPlaybackService: MediaPlaybackService {
         }
 
         if needsStarted {
-            try await sendPlaybackReport(path: ["Sessions", "Playing"], plan: plan, position: position, isPaused: isPaused)
+            try await sendPlaybackReport(
+                path: ["Sessions", "Playing"],
+                plan: plan,
+                position: position,
+                isPaused: isPaused,
+            )
             if var current = activeSessions[playSessionID] {
                 if !current.hasReportedStopped {
                     current.hasReportedStarted = true
@@ -379,7 +388,12 @@ final class EmbyPlaybackService: MediaPlaybackService {
             return
         }
 
-        try await sendPlaybackReport(path: ["Sessions", "Playing", "Progress"], plan: plan, position: position, isPaused: isPaused)
+        try await sendPlaybackReport(
+            path: ["Sessions", "Playing", "Progress"],
+            plan: plan,
+            position: position,
+            isPaused: isPaused,
+        )
     }
 
     func reportStopped(plan: PlaybackPlan, position: TimeInterval) async throws {
@@ -404,7 +418,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
             CanSeek: true,
             PlayMethod: playMethod,
             AudioStreamIndex: active?.audioStreamIndex ?? plan.selectedAudioIndex,
-            SubtitleStreamIndex: active?.subtitleStreamIndex ?? plan.selectedSubtitleIndex
+            SubtitleStreamIndex: active?.subtitleStreamIndex ?? plan.selectedSubtitleIndex,
         )
 
         let body = try JSONEncoder().encode(report)
@@ -437,7 +451,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
         path: [String],
         plan: PlaybackPlan,
         position: TimeInterval,
-        isPaused: Bool
+        isPaused: Bool,
     ) async throws {
         let active = plan.playSessionID.flatMap { activeSessions[$0] }
         let mediaSourceID = active?.mediaSourceID ?? plan.mediaSourceID
@@ -453,7 +467,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
             CanSeek: true,
             PlayMethod: playMethod,
             AudioStreamIndex: active?.audioStreamIndex ?? plan.selectedAudioIndex,
-            SubtitleStreamIndex: active?.subtitleStreamIndex ?? plan.selectedSubtitleIndex
+            SubtitleStreamIndex: active?.subtitleStreamIndex ?? plan.selectedSubtitleIndex,
         )
 
         let body = try JSONEncoder().encode(report)
@@ -470,7 +484,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
     private func selectMediaSource(
         from sources: [EmbyMediaSource],
         quality: TranscodeQualityPreset,
-        requestedCeiling: Int64?
+        requestedCeiling: Int64?,
     ) throws -> SelectedSourceOutcome {
         struct Candidate {
             let source: EmbyMediaSource
@@ -491,7 +505,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
                 source: source,
                 canDirectStream: canDirect,
                 canTranscode: canTrans,
-                bitrate: effectiveBitrate
+                bitrate: effectiveBitrate,
             )
         }
 
@@ -502,7 +516,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
                     source: directCandidate.source,
                     playMethod: .directStream,
                     effectiveQuality: .original,
-                    fallbackMessage: nil
+                    fallbackMessage: nil,
                 )
             }
             if let transcodeCandidate = candidates.first(where: { $0.canTranscode }) {
@@ -510,7 +524,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
                     source: transcodeCandidate.source,
                     playMethod: .transcode,
                     effectiveQuality: .original,
-                    fallbackMessage: nil
+                    fallbackMessage: nil,
                 )
             }
             throw EmbyPlaybackError.noPlayableMediaSource
@@ -527,7 +541,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
                 source: smallSourceCandidate.source,
                 playMethod: .directStream,
                 effectiveQuality: quality,
-                fallbackMessage: nil
+                fallbackMessage: nil,
             )
         }
 
@@ -537,7 +551,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
                 source: transcodeCandidate.source,
                 playMethod: .transcode,
                 effectiveQuality: quality,
-                fallbackMessage: nil
+                fallbackMessage: nil,
             )
         }
 
@@ -547,7 +561,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
                 source: fallbackDirectCandidate.source,
                 playMethod: .directStream,
                 effectiveQuality: .original,
-                fallbackMessage: String(localized: "player.quality.fallback")
+                fallbackMessage: String(localized: "player.quality.fallback"),
             )
         }
 
@@ -556,7 +570,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
 
     private func resolveExternalSubtitles(
         from streams: [EmbyMediaStream],
-        headers: [String: String]
+        headers: [String: String],
     ) -> [ExternalSubtitleTrack] {
         streams.compactMap { stream -> ExternalSubtitleTrack? in
             guard stream.type.lowercased() == "subtitle",
@@ -574,7 +588,7 @@ final class EmbyPlaybackService: MediaPlaybackService {
                 isForced: stream.isForced ?? false,
                 isDefault: stream.isDefault ?? false,
                 httpHeaders: headers,
-                formatHint: stream.codec
+                formatHint: stream.codec,
             )
         }
     }

@@ -71,21 +71,21 @@ struct ProviderSelectionView: View {
             image: "plex_logo",
             accent: Color(red: 0.95, green: 0.68, blue: 0.0),
             provider: .plex,
-            isCompactRow: isCompactRow
+            isCompactRow: isCompactRow,
         )
         providerButton(
             title: "provider.jellyfin",
             image: "jellyfin_logo",
             accent: Color(red: 0.46, green: 0.49, blue: 0.96),
             provider: .jellyfin,
-            isCompactRow: isCompactRow
+            isCompactRow: isCompactRow,
         )
         providerButton(
             title: "provider.emby",
             image: nil,
             accent: Color(red: 0.33, green: 0.76, blue: 0.38),
             provider: .emby,
-            isCompactRow: isCompactRow
+            isCompactRow: isCompactRow,
         )
     }
 
@@ -94,7 +94,7 @@ struct ProviderSelectionView: View {
         image: String?,
         accent: Color,
         provider: MediaProvider,
-        isCompactRow: Bool
+        isCompactRow: Bool,
     ) -> some View {
         let isFocused = focusedProvider == provider
         let isSelecting = selectingProvider == provider
@@ -109,7 +109,7 @@ struct ProviderSelectionView: View {
                 image: image,
                 accent: accent,
                 isCompactRow: isCompactRow,
-                isFocused: isFocused
+                isFocused: isFocused,
             )
             .background {
                 cardBackground(accent: accent, isFocused: isFocused)
@@ -118,8 +118,8 @@ struct ProviderSelectionView: View {
                 cardOverlay(accent: accent, isFocused: isFocused)
             }
             #if os(tvOS)
-                .shadow(color: isFocused ? accent.opacity(0.35) : .clear, radius: 24, y: 8)
-                .scaleEffect(isFocused ? 1.04 : 1)
+            .shadow(color: isFocused ? accent.opacity(0.35) : .clear, radius: 24, y: 8)
+            .scaleEffect(isFocused ? 1.04 : 1)
             #endif
             .opacity(selectingProvider == nil || isSelecting ? 1 : 0.45)
             .animation(.easeOut(duration: 0.18), value: isFocused)
@@ -138,7 +138,7 @@ struct ProviderSelectionView: View {
         image: String?,
         accent: Color,
         isCompactRow: Bool,
-        isFocused: Bool
+        isFocused: Bool,
     ) -> some View {
         #if os(tvOS)
             tvOSCardContent(title: title, image: image, accent: accent, isFocused: isFocused)
@@ -154,7 +154,7 @@ struct ProviderSelectionView: View {
     private func compactRowContent(
         title: LocalizedStringKey,
         image: String?,
-        accent: Color
+        accent: Color,
     ) -> some View {
         HStack(spacing: 16) {
             logoArea(image: image, accent: accent, isTvOS: false)
@@ -178,7 +178,7 @@ struct ProviderSelectionView: View {
     private func compactCardContent(
         title: LocalizedStringKey,
         image: String?,
-        accent: Color
+        accent: Color,
     ) -> some View {
         VStack(spacing: 10) {
             logoArea(image: image, accent: accent, isTvOS: false)
@@ -204,7 +204,7 @@ struct ProviderSelectionView: View {
         title: LocalizedStringKey,
         image: String?,
         accent: Color,
-        isFocused: Bool
+        isFocused: Bool,
     ) -> some View {
         VStack(spacing: 16) {
             logoArea(image: image, accent: accent, isTvOS: true)
@@ -228,7 +228,7 @@ struct ProviderSelectionView: View {
                 .scaledToFit()
                 .frame(
                     maxWidth: isTvOS ? 150 : 72,
-                    maxHeight: isTvOS ? 60 : 30
+                    maxHeight: isTvOS ? 60 : 30,
                 )
                 .accessibilityHidden(true)
         } else {
@@ -237,7 +237,7 @@ struct ProviderSelectionView: View {
                 .scaledToFit()
                 .frame(
                     width: isTvOS ? 48 : 24,
-                    height: isTvOS ? 48 : 24
+                    height: isTvOS ? 48 : 24,
                 )
                 .foregroundStyle(accent)
                 .accessibilityHidden(true)
@@ -259,7 +259,7 @@ struct ProviderSelectionView: View {
         RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
             .stroke(
                 isFocused ? accent.opacity(0.9) : Color.white.opacity(0.10),
-                lineWidth: isFocused ? strokeFocusedLineWidth : 1
+                lineWidth: isFocused ? strokeFocusedLineWidth : 1,
             )
     }
 

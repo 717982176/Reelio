@@ -49,7 +49,7 @@ struct EmbyConnectionStore {
 
     func save(_ state: EmbyConnectionStoreState) throws {
         let normalized = normalizedState(state)
-        defaults.set(try JSONEncoder().encode(normalized), forKey: Self.connectionsDefaultsKey)
+        try defaults.set(JSONEncoder().encode(normalized), forKey: Self.connectionsDefaultsKey)
     }
 
     func upsert(_ connection: EmbyConnection, makeActive: Bool) throws {

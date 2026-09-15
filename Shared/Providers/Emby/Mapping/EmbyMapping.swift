@@ -76,8 +76,9 @@ extension MediaItem {
             type: "Backdrop",
             tag: embyItem.backdropImageTags?.first,
         )
-        let parentBackdropPath: String? = if let parentID = embyItem.parentBackdropItemID ?? embyItem.seriesID ?? embyItem.parentID,
-                                             let parentTag = embyItem.parentBackdropImageTags?.first
+        let parentBackdropPath: String? = if let parentID = embyItem.parentBackdropItemID ?? embyItem
+            .seriesID ?? embyItem.parentID,
+            let parentTag = embyItem.parentBackdropImageTags?.first
         {
             EmbyArtworkPath.make(
                 ownerID: parentID,

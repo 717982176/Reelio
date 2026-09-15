@@ -63,13 +63,13 @@ nonisolated struct EmbyDeviceProfile: Encodable, Sendable {
                     container: "mp4,m4v,mov,mkv,webm,ts",
                     type: "Video",
                     videoCodec: "h264,hevc,vp9,av1,mpeg4,mpeg2video",
-                    audioCodec: "aac,mp3,ac3,eac3,opus,flac,alac,vorbis,truehd,dts"
+                    audioCodec: "aac,mp3,ac3,eac3,opus,flac,alac,vorbis,truehd,dts",
                 ),
                 EmbyDirectPlayProfile(
                     container: "mp3,flac,aac,m4a,alac,wav,ogg,opus",
                     type: "Audio",
                     videoCodec: nil,
-                    audioCodec: nil
+                    audioCodec: nil,
                 ),
             ],
             TranscodingProfiles: [
@@ -82,14 +82,14 @@ nonisolated struct EmbyDeviceProfile: Encodable, Sendable {
                     context: "Streaming",
                     estimateContentLength: false,
                     minSegments: 1,
-                    segmentLength: 3
+                    segmentLength: 3,
                 ),
             ],
             SubtitleProfiles: [
                 EmbySubtitleProfile(format: "srt", method: "External"),
                 EmbySubtitleProfile(format: "vtt", method: "External"),
                 EmbySubtitleProfile(format: "subrip", method: "External"),
-            ]
+            ],
         )
     }
 }
@@ -122,21 +122,21 @@ nonisolated struct EmbyPlaybackInfoRequest: Encodable, Sendable {
         allowAudioStreamCopy: Bool = true,
         isPlayback: Bool = true,
         autoOpenLiveStream: Bool = false,
-        deviceProfile: EmbyDeviceProfile
+        deviceProfile: EmbyDeviceProfile,
     ) {
-        self.UserId = userId
-        self.StartTimeTicks = startTimeTicks
-        self.AudioStreamIndex = audioStreamIndex
-        self.SubtitleStreamIndex = subtitleStreamIndex
-        self.MaxStreamingBitrate = maxStreamingBitrate
-        self.EnableDirectPlay = enableDirectPlay
-        self.EnableDirectStream = enableDirectStream
-        self.EnableTranscoding = enableTranscoding
-        self.AllowVideoStreamCopy = allowVideoStreamCopy
-        self.AllowAudioStreamCopy = allowAudioStreamCopy
-        self.IsPlayback = isPlayback
-        self.AutoOpenLiveStream = autoOpenLiveStream
-        self.DeviceProfile = deviceProfile
+        UserId = userId
+        StartTimeTicks = startTimeTicks
+        AudioStreamIndex = audioStreamIndex
+        SubtitleStreamIndex = subtitleStreamIndex
+        MaxStreamingBitrate = maxStreamingBitrate
+        EnableDirectPlay = enableDirectPlay
+        EnableDirectStream = enableDirectStream
+        EnableTranscoding = enableTranscoding
+        AllowVideoStreamCopy = allowVideoStreamCopy
+        AllowAudioStreamCopy = allowAudioStreamCopy
+        IsPlayback = isPlayback
+        AutoOpenLiveStream = autoOpenLiveStream
+        DeviceProfile = deviceProfile
     }
 }
 
